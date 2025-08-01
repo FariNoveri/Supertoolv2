@@ -1,13 +1,9 @@
--- FE Bypass Mobile Admin GUI Script
--- Enhanced with improved Teleport Player to Me (fixed no valid RemoteEvent/Function), deeper bypass, notifications, full features, scrolling, player visibility
-
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
-local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
@@ -279,6 +275,8 @@ ScrollFrame.ScrollBarThickness = 8
 ScrollFrame.ScrollBarImageColor3 = Colors.Primary
 ScrollFrame.ScrollingDirection = Enum.ScrollingDirection.Y
 ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollFrame.ClipsDescendants = true
+ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ScrollFrame.Parent = Content
 
 local ScrollCorner = Instance.new("UICorner")
@@ -287,13 +285,8 @@ ScrollCorner.Parent = ScrollFrame
 
 local Layout = Instance.new("UIListLayout")
 Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Layout.Padding = UDim.new(0, 5)
+Layout.Padding = UDim.new(0, 8)
 Layout.Parent = ScrollFrame
-
--- Update canvas size automatically
-Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 10)
-end)
 
 -- Update tabs function
 function UpdateTabs()
@@ -463,7 +456,7 @@ local function DisableFEBypass()
     print("🔒 FE Bypass disabled!")
 end
 
--- Teleport Player with Improved Bypass (Fixed No Valid RemoteEvent/Function)
+-- Teleport Player with Improved Bypass
 local function TeleportPlayerBypass(player, target)
     if not FEBypass.Enabled then
         ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
@@ -472,7 +465,6 @@ local function TeleportPlayerBypass(player, target)
     end
     
     pcall(function()
-        -- Validasi pemain dan karakter
         if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
             ShowNotification("❌ Teleport failed: Invalid player!", Colors.Red)
             print("❌ Teleport failed: Player " .. (player and player.Name or "nil") .. " has no valid character!")
@@ -494,9 +486,8 @@ local function TeleportPlayerBypass(player, target)
             return
         end
 
-        -- Posisi tujuan dengan offset dan validasi aman
-        local targetPos = target.Character.HumanoidRootPart.CFrame * CFrame.new(2, 0, 0) -- Offset 2 stud
-        if targetPos.Position.Y > 1000 then -- Cek kalau posisi di luar batas
+        local targetPos = target.Character.HumanoidRootPart.CFrame * CFrame.new(2, 0, 0)
+        if targetPos.Position.Y > 1000 then
             targetPos = targetPos * CFrame.new(0, -targetPos.Position.Y + 10, 0)
             ShowNotification("⚠️ Adjusted position: Target too high!", Colors.Orange)
             print("⚠️ Adjusted position: Target Y > 1000")
@@ -506,12 +497,11 @@ local function TeleportPlayerBypass(player, target)
         rayParams.FilterType = Enum.RaycastFilterType.Blacklist
         local rayResult = workspace:Raycast(targetPos.Position, Vector3.new(0, -10, 0), rayParams)
         if not rayResult or rayResult.Position.Y < targetPos.Position.Y - 5 then
-            targetPos = targetPos * CFrame.new(0, 5, 0) -- Naikkan 5 stud
+            targetPos = targetPos * CFrame.new(0, 5, 0)
             ShowNotification("⚠️ Adjusted position for safety!", Colors.Orange)
             print("⚠️ Adjusted teleport position for safety")
         end
 
-        -- Efek visual teleportasi
         local particle = Instance.new("ParticleEmitter")
         particle.Texture = "rbxassetid://243098098"
         particle.Size = NumberSequence.new(1, 0)
@@ -527,18 +517,14 @@ local function TeleportPlayerBypass(player, target)
         wait(1)
         particle.Parent:Destroy()
 
-        -- Teleport client-sided
         player.Character.HumanoidRootPart.CFrame = targetPos
 
-        -- Bypass FE dengan RemoteEvent/Function
         local teleportKeywords = {"teleport", "move", "tp", "relocate", "position", "update", "warp", "setposition", "updateplayer", "char", "tele", "goto"}
         local remotesTried = {}
         local success = false
         local maxAttempts = 3
-        local attempt = 1
-
-        -- Cari RemoteEvent/Function di lebih banyak lokasi
         local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui, LocalPlayer.PlayerScripts}
+
         for _, location in pairs(searchLocations) do
             for _, obj in pairs(location:GetDescendants()) do
                 if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
@@ -569,7 +555,7 @@ local function TeleportPlayerBypass(player, target)
                                         success = true
                                     end
                                 end
-                                wait(0.15) -- Delay lebih panjang untuk latensi
+                                wait(0.15)
                             end
                         end
                     end
@@ -577,7 +563,6 @@ local function TeleportPlayerBypass(player, target)
             end
         end
 
-        -- Brute force semua RemoteEvent/Function kalau kata kunci gagal
         if not success then
             for _, location in pairs(searchLocations) do
                 for _, obj in pairs(location:GetDescendants()) do
@@ -606,7 +591,6 @@ local function TeleportPlayerBypass(player, target)
             end
         end
 
-        -- Simulasi gerakan bertahap untuk bypass validasi server
         if not success then
             local startPos = player.Character.HumanoidRootPart.Position
             local steps = 10
@@ -625,22 +609,214 @@ local function TeleportPlayerBypass(player, target)
             end
         end
 
-        -- Log dan notifikasi
         if success then
             ShowNotification("📞 Teleported " .. player.Name .. " to you!", Colors.Green)
             print("📞 Teleported " .. player.Name .. " to " .. target.Name)
             print("✅ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
         else
-            player.Character.HumanoidRootPart.CFrame = targetPos -- Fallback client-sided
+            player.Character.HumanoidRootPart.CFrame = targetPos
             ShowNotification("⚠️ Server sync failed: No valid RemoteEvent/Function! Teleport applied locally.", Colors.Orange)
             print("⚠️ Server sync failed: No valid RemoteEvent/Function found")
             print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
             print("ℹ️ Teleport applied client-sided only")
-            print("ℹ️ Try checking game-specific RemoteEvents or use in a game with teleport Remotes")
         end
     end, function(err)
         ShowNotification("⚠️ Teleport error: " .. tostring(err), Colors.Red)
         print("⚠️ Teleport error: " .. tostring(err))
+    end)
+end
+
+-- Drag Object in Map with Bypass
+local function GetObjectFromRay(position)
+    local mousePos = UserInputService:GetMouseLocation()
+    local ray = workspace.CurrentCamera:ScreenPointToRay(mousePos.X, mousePos.Y)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character or Instance.new("Model")}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local rayResult = workspace:Raycast(ray.Origin, ray.Direction * 1000, rayParams)
+    if rayResult and rayResult.Instance and rayResult.Instance.Parent then
+        local obj = rayResult.Instance
+        while obj and obj.Parent and not obj:IsA("Model") and not obj:IsA("BasePart") do
+            obj = obj.Parent
+        end
+        if obj and (obj:IsA("BasePart") or obj:IsA("Model")) and not obj:IsDescendantOf(Players:GetPlayers()) and not obj.Anchored then
+            return obj, rayResult.Position
+        end
+    end
+    return nil, nil
+end
+
+local function DragObjectBypass()
+    if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        local draggingObj = nil
+        local lastPos = nil
+        local connectionInput, connectionEnded
+        local snapToGrid = false
+        local gridSize = 1
+        
+        ShowNotification("🖱️ Drag mode: Click/tap object to select, drag to move, click again to release", Colors.Cyan)
+        print("🖱️ Drag mode activated: Click/tap to select object")
+        
+        connectionInput = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                if not draggingObj then
+                    local obj, hitPos = GetObjectFromRay(input.Position)
+                    if obj then
+                        if obj:IsA("BasePart") and obj.Anchored then
+                            ShowNotification("❌ Cannot drag anchored object: " .. obj.Name, Colors.Red)
+                            print("❌ Cannot drag anchored object: " .. obj.Name)
+                            return
+                        end
+                        draggingObj = obj
+                        lastPos = hitPos
+                        
+                        local particle = Instance.new("ParticleEmitter")
+                        particle.Texture = "rbxassetid://243098098"
+                        particle.Size = NumberSequence.new(0.5, 0)
+                        particle.Lifetime = NumberRange.new(0.3, 0.5)
+                        particle.Rate = 20
+                        particle.SpreadAngle = Vector2.new(360, 360)
+                        particle.Parent = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart") or Instance.new("Part")
+                        if particle.Parent ~= obj then
+                            particle.Parent.Position = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
+                            particle.Parent.Transparency = 1
+                            particle.Parent.Anchored = true
+                            particle.Parent.Parent = workspace
+                        end
+                        wait(0.5)
+                        if particle.Parent ~= obj then particle.Parent:Destroy() end
+                        
+                        ShowNotification("✋ Selected object: " .. obj.Name, Colors.Green)
+                        print("✋ Selected object: " .. obj.Name)
+                    else
+                        ShowNotification("⚠️ No valid object selected!", Colors.Orange)
+                        print("⚠️ No valid object selected")
+                    end
+                else
+                    draggingObj = nil
+                    if connectionInput then connectionInput:Disconnect() end
+                    if connectionEnded then connectionEnded:Disconnect() end
+                    ShowNotification("✋ Drag mode ended", Colors.Green)
+                    print("✋ Drag mode ended")
+                end
+            end
+        end)
+        
+        connectionEnded = UserInputService.InputChanged:Connect(function(input)
+            if draggingObj and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local _, hitPos = GetObjectFromRay(input.Position)
+                if hitPos then
+                    local newPos = hitPos
+                    if snapToGrid then
+                        newPos = Vector3.new(
+                            math.floor(newPos.X / gridSize + 0.5) * gridSize,
+                            math.floor(newPos.Y / gridSize + 0.5) * gridSize,
+                            math.floor(newPos.Z / gridSize + 0.5) * gridSize
+                        )
+                    end
+                    
+                    if draggingObj:IsA("BasePart") then
+                        draggingObj.Position = newPos
+                    elseif draggingObj:IsA("Model") then
+                        draggingObj:PivotTo(CFrame.new(newPos))
+                    end
+                    
+                    local particle = Instance.new("ParticleEmitter")
+                    particle.Texture = "rbxassetid://243098098"
+                    particle.Size = NumberSequence.new(0.3, 0)
+                    particle.Lifetime = NumberRange.new(0.2, 0.4)
+                    particle.Rate = 10
+                    particle.SpreadAngle = Vector2.new(360, 360)
+                    particle.Parent = draggingObj:IsA("BasePart") and draggingObj or draggingObj:FindFirstChildOfClass("BasePart") or Instance.new("Part")
+                    if particle.Parent ~= draggingObj then
+                        particle.Parent.Position = newPos
+                        particle.Parent.Transparency = 1
+                        particle.Parent.Anchored = true
+                        particle.Parent.Parent = workspace
+                    end
+                    wait(0.3)
+                    if particle.Parent ~= draggingObj then particle.Parent:Destroy() end
+                    
+                    local moveKeywords = {"move", "position", "update", "setposition", "relocate", "warp", "teleport", "obj", "object"}
+                    local remotesTried = {}
+                    local success = false
+                    local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui, LocalPlayer.PlayerScripts}
+                    
+                    for _, location in pairs(searchLocations) do
+                        for _, obj in pairs(location:GetDescendants()) do
+                            if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
+                                for _, keyword in pairs(moveKeywords) do
+                                    if string.find(string.lower(obj.Name), keyword) then
+                                        table.insert(remotesTried, obj)
+                                        if obj:IsA("RemoteEvent") then
+                                            pcall(function()
+                                                obj:FireServer(draggingObj, newPos)
+                                                obj:FireServer(draggingObj, CFrame.new(newPos))
+                                                obj:FireServer({object = draggingObj, position = newPos})
+                                                obj:FireServer({x = newPos.X, y = newPos.Y, z = newPos.Z})
+                                                success = true
+                                            end)
+                                        elseif obj:IsA("RemoteFunction") then
+                                            local invokeSuccess, result = pcall(obj.InvokeServer, obj, draggingObj, newPos)
+                                            if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                                success = true
+                                            end
+                                            invokeSuccess, result = pcall(obj.InvokeServer, obj, {object = draggingObj, position = newPos})
+                                            if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                                success = true
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    if not success then
+                        for _, location in pairs(searchLocations) do
+                            for _, obj in pairs(location:GetDescendants()) do
+                                if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
+                                    table.insert(remotesTried, obj)
+                                    if obj:IsA("RemoteEvent") then
+                                        pcall(function()
+                                            obj:FireServer(draggingObj, newPos)
+                                            obj:FireServer(draggingObj, CFrame.new(newPos))
+                                            obj:FireServer({object = draggingObj, position = newPos})
+                                            success = true
+                                        end)
+                                    elseif obj:IsA("RemoteFunction") then
+                                        local invokeSuccess, result = pcall(obj.InvokeServer, obj, draggingObj, newPos)
+                                        if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                            success = true
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    if success then
+                        print("🚚 Moved object: " .. draggingObj.Name .. " to " .. tostring(newPos))
+                        print("✅ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
+                    else
+                        ShowNotification("⚠️ Server sync failed: No valid RemoteEvent/Function! Moved locally.", Colors.Orange)
+                        print("⚠️ Server sync failed: No valid RemoteEvent/Function for object: " .. draggingObj.Name)
+                        print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
+                        print("ℹ️ Object moved client-sided only")
+                    end
+                end
+            end
+        end)
+    end, function(err)
+        ShowNotification("⚠️ Drag error: " .. tostring(err), Colors.Red)
+        print("⚠️ Drag error: " .. tostring(err))
     end)
 end
 
@@ -947,6 +1123,82 @@ local function RunAdminCommand(command)
     end)
 end
 
+-- Fly Mode with WASD Controls
+local function ToggleFlyMode()
+    if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+
+    local flying = false
+    local speed = 50
+    local bodyVelocity, bodyGyro
+    
+    return function()
+        pcall(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+                
+                if not flying then
+                    flying = true
+                    bodyVelocity = Instance.new("BodyVelocity")
+                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+                    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                    bodyVelocity.Parent = humanoidRootPart
+                    
+                    bodyGyro = Instance.new("BodyGyro")
+                    bodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
+                    bodyGyro.CFrame = humanoidRootPart.CFrame
+                    bodyGyro.Parent = humanoidRootPart
+                    
+                    ShowNotification("🚀 Flying enabled!", Colors.Green)
+                    print("🚀 Flying enabled!")
+                    
+                    spawn(function()
+                        while flying and humanoidRootPart.Parent do
+                            local moveVector = Vector3.new(0, 0, 0)
+                            local camera = workspace.CurrentCamera
+                            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                                moveVector = moveVector + camera.CFrame.LookVector
+                            end
+                            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                                moveVector = moveVector - camera.CFrame.LookVector
+                            end
+                            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                                moveVector = moveVector - camera.CFrame.RightVector
+                            end
+                            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                                moveVector = moveVector + camera.CFrame.RightVector
+                            end
+                            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+                                moveVector = moveVector - Vector3.new(0, 1, 0)
+                            end
+                            if UserInputService:IsKeyDown(Enum.KeyCode.E) then
+                                moveVector = moveVector + Vector3.new(0, 1, 0)
+                            end
+                            bodyVelocity.Velocity = moveVector * speed
+                            bodyGyro.CFrame = camera.CFrame
+                            RunService.RenderStepped:Wait()
+                        end
+                    end)
+                else
+                    flying = false
+                    if bodyVelocity then bodyVelocity:Destroy() end
+                    if bodyGyro then bodyGyro:Destroy() end
+                    ShowNotification("🚀 Flying disabled!", Colors.Green)
+                    print("🚀 Flying disabled!")
+                end
+            else
+                ShowNotification("❌ Fly failed: No character!", Colors.Red)
+                print("❌ Fly failed: No character!")
+            end
+        end)
+    end
+end
+
+local flyFunction = ToggleFlyMode()
+
 -- Update content function with optimized scrolling
 function UpdateContent()
     for _, child in pairs(ScrollFrame:GetChildren()) do
@@ -1193,42 +1445,8 @@ function UpdateContent()
                 end
             end)
         end, Colors.Green)
-        CreateButton("🚀 Fly Mode", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            local flying = false
-            local speed = 50
-            local bodyVelocity, bodyGyro
-            
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-                    
-                    if not flying then
-                        flying = true
-                        bodyVelocity = Instance.new("BodyVelocity")
-                        bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-                        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                        bodyVelocity.Parent = humanoidRootPart
-                        
-                        bodyGyro = Instance.new("BodyGyro")
-                        bodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
-                        bodyGyro.CFrame = humanoidRootPart.CFrame
-                        bodyGyro.Parent = humanoidRootPart
-                        
-                        ShowNotification("🚀 Flying enabled!", Colors.Green)
-                        print("🚀 Flying enabled!")
-                    else
-                        flying = false
-                        if bodyVelocity then bodyVelocity:Destroy() end
-                        if bodyGyro then bodyGyro:Destroy() end
-                        ShowNotification("🚀 Flying disabled!", Colors.Green)
-                        print("🚀 Flying disabled!")
-                    end
-                else
-                    ShowNotification("❌ Fly failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Cyan)
+        CreateButton("🚀 Fly Mode", flyFunction, Colors.Cyan)
+        CreateButton("🖱️ Drag Object in Map", DragObjectBypass, Colors.Purple)
         
     elseif currentTab == 7 then -- Bypass Tab
         CreateButton("🛡️ Toggle FE Bypass", function()
@@ -1398,74 +1616,8 @@ spawn(function()
     end
 end)
 
--- Fly controls (WASD when flying)
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.A or 
-       input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.D or
-       input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.E then
-        
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            local bodyVelocity = character.HumanoidRootPart:FindFirstChild("BodyVelocity")
-            
-            if bodyVelocity then
-                local camera = workspace.CurrentCamera
-                local moveVector = Vector3.new(0, 0, 0)
-                
-                if input.KeyCode == Enum.KeyCode.W then
-                    moveVector = moveVector + camera.CFrame.LookVector
-                elseif input.KeyCode == Enum.KeyCode.S then
-                    moveVector = moveVector - camera.CFrame.LookVector
-                elseif input.KeyCode == Enum.KeyCode.A then
-                    moveVector = moveVector - camera.CFrame.RightVector
-                elseif input.KeyCode == Enum.KeyCode.D then
-                    moveVector = moveVector + camera.CFrame.RightVector
-                elseif input.KeyCode == Enum.KeyCode.Q then
-                    moveVector = moveVector - camera.CFrame.UpVector
-                elseif input.KeyCode == Enum.KeyCode.E then
-                    moveVector = moveVector + camera.CFrame.UpVector
-                end
-                
-                bodyVelocity.Velocity = moveVector * 50
-            end
-        end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.A or 
-       input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.D or
-       input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.E then
-        
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            local bodyVelocity = character.HumanoidRootPart:FindFirstChild("BodyVelocity")
-            if bodyVelocity then
-                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            end
-        end
-    end
-end)
-
--- Initialize
+-- Initial setup
 UpdateTabs()
 UpdateContent()
-
--- Handle Script 1
-if _G.Script1Active and _G.Script1Gui then
-    _G.Script1Active = false
-    _G.Script1Gui.Visible = false
-end
-
--- Welcome message
-ShowNotification("🔥 FE Bypass Admin Panel loaded!", Colors.Green)
-print("🔥 FE Bypass Admin Panel loaded!")
-print("📱 Mobile optimized with full player visibility")
-print("🛡️ Enable FE Bypass for all features")
-print("👑 Notifications for admin access and other actions")
-print("📞 Improved Teleport Player to Me with deeper bypass and brute force")
-print("🎮 Use WASD/QE for fly controls when flying")
+ShowNotification("🔥 FE Bypass Admin GUI Loaded!", Colors.Green)
+print("🔥 FE Bypass Admin GUI Loaded!")
