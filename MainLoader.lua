@@ -1,6 +1,4 @@
--- FE Bypass Mobile Admin GUI Script
--- Enhanced with deeper FE bypass, scrolling, full player visibility, and explosion features
-
+-- FE BYPASS ADMIN GUI - FIXED VERSION
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -10,6 +8,11 @@ local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
+
+-- Wait for character to load
+if not LocalPlayer.Character then
+    LocalPlayer.CharacterAdded:Wait()
+end
 
 -- Global untuk Script 1
 _G.Script1Active = _G.Script1Active or false
@@ -39,10 +42,16 @@ local Colors = {
     Gray = Color3.fromRGB(150, 150, 150)
 }
 
+-- Destroy existing GUI if it exists
+if LocalPlayer.PlayerGui:FindFirstChild("FEBypassAdminGui") then
+    LocalPlayer.PlayerGui:FindFirstChild("FEBypassAdminGui"):Destroy()
+end
+
 -- GUI utama
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FEBypassAdminGui"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999999
 ScreenGui.Parent = LocalPlayer.PlayerGui
 
 -- Frame utama
@@ -52,6 +61,8 @@ MainFrame.Size = UDim2.new(0, 350, 0, 500)
 MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250)
 MainFrame.BackgroundColor3 = Colors.Dark
 MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = false
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -184,7 +195,7 @@ local BypassCorner = Instance.new("UICorner")
 BypassCorner.CornerRadius = UDim.new(0, 8)
 BypassCorner.Parent = BypassBtn
 
--- Tab system - Optimized horizontal scroll
+-- Tab system
 local TabFrame = Instance.new("ScrollingFrame")
 TabFrame.Size = UDim2.new(1, -20, 0, 40)
 TabFrame.Position = UDim2.new(0, 10, 0, 110)
@@ -202,9 +213,11 @@ TabLayout.Padding = UDim.new(0, 5)
 TabLayout.Parent = TabFrame
 
 -- Update canvas size for tabs
-TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+local function updateTabCanvas()
     TabFrame.CanvasSize = UDim2.new(0, TabLayout.AbsoluteContentSize.X + 10, 0, 40)
-end)
+end
+
+TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateTabCanvas)
 
 local tabs = {"Spawn", "Player", "Teleport", "Server", "Fun", "Utility", "Bypass"}
 local tabButtons = {}
@@ -226,15 +239,9 @@ for i, tabName in pairs(tabs) do
     tabCorner.Parent = tabBtn
     
     tabButtons[i] = tabBtn
-    
-    tabBtn.MouseButton1Click:Connect(function()
-        currentTab = i
-        UpdateTabs()
-        UpdateContent()
-    end)
 end
 
--- Optimized Scrolling frame untuk konten
+-- Scrolling frame untuk konten
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Size = UDim2.new(1, -20, 1, -160)
 ScrollFrame.Position = UDim2.new(0, 10, 0, 160)
@@ -256,51 +263,11 @@ Layout.Padding = UDim.new(0, 5)
 Layout.Parent = ScrollFrame
 
 -- Update canvas size automatically
-Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+local function updateScrollCanvas()
     ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 10)
-end)
-
--- Update tabs function
-function UpdateTabs()
-    for i, btn in pairs(tabButtons) do
-        if i == currentTab then
-            btn.BackgroundColor3 = Colors.Primary
-            btn.TextColor3 = Colors.White
-        else
-            btn.BackgroundColor3 = Colors.Surface
-            btn.TextColor3 = Colors.Gray
-        end
-    end
 end
 
--- Fungsi buat tombol
-local function CreateButton(text, callback, color)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -10, 0, 40)
-    btn.BackgroundColor3 = color or Colors.Primary
-    btn.BorderSizePixel = 0
-    btn.Text = text
-    btn.TextColor3 = Colors.White
-    btn.TextSize = 13
-    btn.Font = Enum.Font.Gotham
-    btn.TextWrapped = true
-    btn.Parent = ScrollFrame
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = btn
-    
-    btn.MouseButton1Click:Connect(callback)
-    
-    btn.MouseButton1Down:Connect(function()
-        btn.BackgroundTransparency = 0.3
-    end)
-    btn.MouseButton1Up:Connect(function()
-        btn.BackgroundTransparency = 0
-    end)
-    
-    return btn
-end
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateScrollCanvas)
 
 -- FE Bypass Functions
 local function EnableFEBypass()
@@ -333,17 +300,6 @@ local function EnableFEBypass()
                             accessoryPart.Transparency = 1
                         end
                     end
-                end
-            end
-            
-            FEBypass.FakeCharacter = FEBypass.OldCharacter:Clone()
-            FEBypass.FakeCharacter.Parent = workspace
-            FEBypass.FakeCharacter.Name = LocalPlayer.Name .. "_Fake"
-            
-            for _, part in pairs(FEBypass.FakeCharacter:GetChildren()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                    part.Anchored = true
                 end
             end
         end
@@ -393,159 +349,51 @@ local function DisableFEBypass()
     print("🔒 FE Bypass disabled!")
 end
 
--- Teleport Player with Deeper Bypass
-local function TeleportPlayerBypass(player, target)
-    if not FEBypass.Enabled then
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and
-           target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            -- Client-sided teleport
-            player.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
-            -- Attempt server-sided teleport via RemoteEvent
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                    obj:FireServer(player, target.Character.HumanoidRootPart.CFrame)
-                end
-            end
-            print("🚀 Bypass TP: " .. player.Name .. " to " .. target.Name)
+-- Update tabs function
+local function UpdateTabs()
+    for i, btn in pairs(tabButtons) do
+        if i == currentTab then
+            btn.BackgroundColor3 = Colors.Primary
+            btn.TextColor3 = Colors.White
+        else
+            btn.BackgroundColor3 = Colors.Surface
+            btn.TextColor3 = Colors.Gray
         end
-    end)
+    end
 end
 
--- Ambil Akses Admin (Enhanced)
-local function GrantAdminAccess()
-    if not FEBypass.Enabled then
-        print("❌ Enable FE Bypass first!")
-        return
-    end
+-- Fungsi buat tombol
+local function CreateButton(text, callback, color)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 40)
+    btn.BackgroundColor3 = color or Colors.Primary
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextColor3 = Colors.White
+    btn.TextSize = 13
+    btn.Font = Enum.Font.Gotham
+    btn.TextWrapped = true
+    btn.Parent = ScrollFrame
     
-    pcall(function()
-        local adminKeywords = {"admin", "mod", "cmd", "command", "privilege", "control", "access", "perm", "role"}
-        local payloads = {true, 1, "admin", "grant", LocalPlayer.Name, LocalPlayer.UserId}
-        
-        -- Cari dan coba semua RemoteEvent/Function yang relevan
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                for _, keyword in pairs(adminKeywords) do
-                    if string.find(string.lower(obj.Name), keyword) then
-                        if obj:IsA("RemoteEvent") then
-                            for _, payload in pairs(payloads) do
-                                obj:FireServer(payload)
-                            end
-                        elseif obj:IsA("RemoteFunction") then
-                            for _, payload in pairs(payloads) do
-                                obj:InvokeServer(payload)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        
-        -- Aktifkan GUI admin jika ada
-        if LocalPlayer:FindFirstChild("PlayerGui") then
-            for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") then
-                    gui.Enabled = true
-                end
-            end
-        end
-        
-        -- Set atribut admin
-        LocalPlayer:SetAttribute("IsAdmin", true)
-        LocalPlayer:SetAttribute("AdminLevel", 999)
-        print("👑 Admin access attempted with multiple payloads! Check if privileges are granted.")
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(callback)
+    
+    btn.MouseButton1Down:Connect(function()
+        btn.BackgroundTransparency = 0.3
     end)
+    btn.MouseButton1Up:Connect(function()
+        btn.BackgroundTransparency = 0
+    end)
+    
+    return btn
 end
 
--- Explosion Features with Server-Sided Attempt
-local function SpawnExplosion(position)
-    if not FEBypass.Enabled then
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        -- Client-sided explosion
-        local explosion = Instance.new("Explosion")
-        explosion.Position = position
-        explosion.BlastRadius = 20
-        explosion.BlastPressure = 50000
-        explosion.DestroyJointRadiusPercent = 0
-        explosion.Parent = workspace
-        
-        -- Attempt server-sided explosion
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                obj:FireServer(position, 20, 50000)
-            end
-        end
-        print("💥 Explosion spawned at: " .. tostring(position))
-    end)
-end
-
-local function SpawnCloudExplosion(player)
-    if not FEBypass.Enabled then
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 50, 0)
-            -- Client-sided explosion
-            local explosion = Instance.new("Explosion")
-            explosion.Position = position
-            explosion.BlastRadius = 30
-            explosion.BlastPressure = 30000
-            explosion.DestroyJointRadiusPercent = 0
-            explosion.Parent = workspace
-            
-            -- Attempt server-sided explosion
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                    obj:FireServer(position, 30, 30000)
-                end
-            end
-            print("☁️ Cloud explosion spawned above: " .. player.Name)
-        end
-    end)
-end
-
-local function SpawnExplosionToPlayer(targetPlayer)
-    if not FEBypass.Enabled then
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local position = targetPlayer.Character.HumanoidRootPart.Position
-            -- Client-sided explosion
-            local explosion = Instance.new("Explosion")
-            explosion.Position = position
-            explosion.BlastRadius = 15
-            explosion.BlastPressure = 40000
-            explosion.DestroyJointRadiusPercent = 0
-            explosion.Parent = workspace
-            
-            -- Attempt server-sided explosion
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                    obj:FireServer(position, 15, 40000)
-                end
-            end
-            print("💥 Explosion targeted at: " .. targetPlayer.Name)
-        end
-    end)
-end
-
--- Update content function with optimized scrolling
-function UpdateContent()
+-- Update content function
+local function UpdateContent()
+    -- Clear existing buttons
     for _, child in pairs(ScrollFrame:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
@@ -569,33 +417,37 @@ function UpdateContent()
                 print("✨ Spawned: Neon Box")
             end)
         end, Colors.Green)
+        
         CreateButton("💥 Spawn Explosion", function()
+            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                SpawnExplosion(LocalPlayer.Character.HumanoidRootPart.Position)
+                local explosion = Instance.new("Explosion")
+                explosion.Position = LocalPlayer.Character.HumanoidRootPart.Position
+                explosion.BlastRadius = 20
+                explosion.BlastPressure = 50000
+                explosion.Parent = workspace
+                print("💥 Explosion spawned!")
             end
         end, Colors.Red)
-        CreateButton("☁️ Cloud Explosion", function()
-            SpawnCloudExplosion(LocalPlayer)
-        end, Colors.Cyan)
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                CreateButton("💥 Explosion to " .. player.Name, function()
-                    SpawnExplosionToPlayer(player)
-                end, Colors.Orange)
-            end
-        end
         
     elseif currentTab == 2 then -- Player Tab
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 CreateButton("👤 " .. player.Name, function() end, Colors.Gray)
-                CreateButton("📞 TP " .. player.Name .. " to Me", function()
-                    TeleportPlayerBypass(player, LocalPlayer)
-                end, Colors.Orange)
             end
         end
         
     elseif currentTab == 3 then -- Teleport Tab
+        CreateButton("🌍 TP to Spawn", function()
+            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10, 0)
+                    print("🌍 Teleported to Spawn")
+                end
+            end)
+        end, Colors.Green)
+        
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 CreateButton("🚀 TP to " .. player.Name, function()
@@ -604,32 +456,12 @@ function UpdateContent()
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and
                            player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                             LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                            -- Attempt server-sided teleport
-                            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                                    obj:FireServer(LocalPlayer, player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0))
-                                end
-                            end
                             print("🚀 Teleported to: " .. player.Name)
                         end
                     end)
                 end, Colors.Primary)
             end
         end
-        CreateButton("🌍 TP to Spawn", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10, 0)
-                    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                        if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                            obj:FireServer(LocalPlayer, CFrame.new(0, 10, 0))
-                        end
-                    end
-                    print("🌍 Teleported to Spawn")
-                end
-            end)
-        end, Colors.Green)
         
     elseif currentTab == 4 then -- Server Tab
         CreateButton("☀️ Day Time", function()
@@ -637,31 +469,12 @@ function UpdateContent()
             Lighting.TimeOfDay = "12:00:00"
             print("☀️ Set to Day Time")
         end, Colors.Orange)
+        
         CreateButton("🌙 Night Time", function()
             if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
             Lighting.TimeOfDay = "00:00:00"
             print("🌙 Set to Night Time")
         end, Colors.Purple)
-        CreateButton("💡 Max Brightness", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            Lighting.Brightness = 3
-            print("💡 Brightness set to max")
-        end, Colors.Yellow)
-        CreateButton("🌑 Dark Mode", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            Lighting.Brightness = 0
-            print("🌑 Dark Mode enabled")
-        end, Colors.Gray)
-        CreateButton("🌫️ Heavy Fog", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            Lighting.FogEnd = 50
-            print("🌫️ Heavy Fog enabled")
-        end, Colors.Gray)
-        CreateButton("🌤️ Clear Sky", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            Lighting.FogEnd = 100000
-            print("🌤️ Clear Sky enabled")
-        end, Colors.Cyan)
         
     elseif currentTab == 5 then -- Fun Tab
         CreateButton("🎵 Play Music", function()
@@ -669,38 +482,15 @@ function UpdateContent()
             pcall(function()
                 local sound = Instance.new("Sound")
                 sound.SoundId = "rbxassetid://142376088"
-                sound.Volume = 1
+                sound.Volume = 0.5
                 sound.Looped = true
                 sound.Parent = workspace
                 sound:Play()
                 print("🎵 Music playing")
             end)
         end, Colors.Pink)
-        CreateButton("🔊 Stop All Sounds", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if obj:IsA("Sound") then
-                    obj:Stop()
-                    obj:Destroy()
-                end
-            end
-            print("🔊 All sounds stopped")
-        end, Colors.Gray)
         
     elseif currentTab == 6 then -- Utility Tab
-        CreateButton("🔄 Rejoin Server", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-        end, Colors.Orange)
-        CreateButton("💀 Reset Character", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.Health = 0
-                    print("💀 Character reset")
-                end
-            end)
-        end, Colors.Red)
         CreateButton("⚡ Super Speed", function()
             if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
             pcall(function()
@@ -710,6 +500,7 @@ function UpdateContent()
                 end
             end)
         end, Colors.Green)
+        
         CreateButton("🐌 Normal Speed", function()
             if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
             pcall(function()
@@ -719,47 +510,6 @@ function UpdateContent()
                 end
             end)
         end, Colors.Gray)
-        CreateButton("🦘 Super Jump", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.JumpPower = 150
-                    print("🦘 Super jump: 150")
-                end
-            end)
-        end, Colors.Green)
-        CreateButton("🚀 Fly Mode", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
-            local flying = false
-            local speed = 50
-            local bodyVelocity, bodyGyro
-            
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-                    
-                    if not flying then
-                        flying = true
-                        bodyVelocity = Instance.new("BodyVelocity")
-                        bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-                        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                        bodyVelocity.Parent = humanoidRootPart
-                        
-                        bodyGyro = Instance.new("BodyGyro")
-                        bodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
-                        bodyGyro.CFrame = humanoidRootPart.CFrame
-                        bodyGyro.Parent = humanoidRootPart
-                        
-                        print("🚀 Flying enabled!")
-                    else
-                        flying = false
-                        if bodyVelocity then bodyVelocity:Destroy() end
-                        if bodyGyro then bodyGyro:Destroy() end
-                        print("🚀 Flying disabled!")
-                    end
-                end
-            end)
-        end, Colors.Cyan)
         
     elseif currentTab == 7 then -- Bypass Tab
         CreateButton("🛡️ Toggle FE Bypass", function()
@@ -769,6 +519,7 @@ function UpdateContent()
                 EnableFEBypass()
             end
         end, FEBypass.Enabled and Colors.Green or Colors.Red)
+        
         CreateButton("👻 Invisible Mode", function()
             if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
             pcall(function()
@@ -782,10 +533,20 @@ function UpdateContent()
                 end
             end)
         end, Colors.Purple)
-        CreateButton("👑 Grant Admin Access", function()
-            GrantAdminAccess()
-        end, Colors.Yellow)
     end
+    
+    -- Update canvas size after adding buttons
+    wait(0.1)
+    updateScrollCanvas()
+end
+
+-- Tab click events
+for i, tabBtn in pairs(tabButtons) do
+    tabBtn.MouseButton1Click:Connect(function()
+        currentTab = i
+        UpdateTabs()
+        UpdateContent()
+    end)
 end
 
 -- Touch-friendly dragging
@@ -820,7 +581,6 @@ MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     local targetSize = isMinimized and UDim2.new(0, 350, 0, 50) or UDim2.new(0, 350, 0, 500)
     TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = targetSize}):Play()
-    wait(0.1)
     Content.Visible = not isMinimized
 end)
 
@@ -829,6 +589,15 @@ CloseBtn.MouseButton1Click:Connect(function()
         DisableFEBypass()
     end
     ScreenGui:Destroy()
+end)
+
+-- FE Bypass toggle
+BypassBtn.MouseButton1Click:Connect(function()
+    if FEBypass.Enabled then
+        DisableFEBypass()
+    else
+        EnableFEBypass()
+    end
 end)
 
 -- Script 1 control
@@ -846,92 +615,15 @@ SwitchBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- FE Bypass toggle
-BypassBtn.MouseButton1Click:Connect(function()
-    if FEBypass.Enabled then
-        DisableFEBypass()
-    else
-        EnableFEBypass()
-    end
-end)
-
--- Auto refresh player lists
-spawn(function()
-    while ScreenGui.Parent do
-        wait(5)
-        if currentTab == 2 or currentTab == 3 or currentTab == 1 then
-            UpdateContent()
-        end
-    end
-end)
-
--- Fly controls (WASD when flying)
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.A or 
-       input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.D or
-       input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.E then
-        
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            local humanoidRootPart = character.HumanoidRootPart
-            local bodyVelocity = humanoidRootPart:FindFirstChild("BodyVelocity")
-            
-            if bodyVelocity then
-                local camera = workspace.CurrentCamera
-                local moveVector = Vector3.new(0, 0, 0)
-                
-                if input.KeyCode == Enum.KeyCode.W then
-                    moveVector = moveVector + camera.CFrame.LookVector
-                elseif input.KeyCode == Enum.KeyCode.S then
-                    moveVector = moveVector - camera.CFrame.LookVector
-                elseif input.KeyCode == Enum.KeyCode.A then
-                    moveVector = moveVector - camera.CFrame.RightVector
-                elseif input.KeyCode == Enum.KeyCode.D then
-                    moveVector = moveVector + camera.CFrame.RightVector
-                elseif input.KeyCode == Enum.KeyCode.Q then
-                    moveVector = moveVector - camera.CFrame.UpVector
-                elseif input.KeyCode == Enum.KeyCode.E then
-                    moveVector = moveVector + camera.CFrame.UpVector
-                end
-                
-                bodyVelocity.Velocity = moveVector * 50
-            end
-        end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.A or 
-       input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.D or
-       input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.E then
-        
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            local bodyVelocity = character.HumanoidRootPart:FindFirstChild("BodyVelocity")
-            if bodyVelocity then
-                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            end
-        end
-    end
-end)
-
--- Initialize
+-- Initialize GUI
 UpdateTabs()
 UpdateContent()
 
--- Handle Script 1
-if _G.Script1Active and _G.Script1Gui then
-    _G.Script1Active = false
-    _G.Script1Gui.Visible = false
-end
+-- Success message
+print("🔥 FE Bypass Admin Panel loaded successfully!")
+print("📱 Mobile optimized interface ready")
+print("🛡️ Enable FE Bypass for enhanced features")
 
--- Welcome message
-print("🔥 FE Bypass Admin Panel loaded!")
-print("📱 Mobile optimized with full player visibility")
-print("🛡️ Enable FE Bypass for all features")
-print("👑 Enhanced admin access and server-sided attempts in Bypass/Spawn tabs")
-print("🎮 Use WASD/QE for fly controls when flying")
+-- Make sure GUI is visible
+ScreenGui.Enabled = true
+MainFrame.Visible = true
