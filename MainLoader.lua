@@ -1,5 +1,5 @@
 -- FE Bypass Mobile Admin GUI Script
--- Optimized for scrolling and full player visibility with FE bypass
+-- Optimized for scrolling, full player visibility, and admin access feature
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -409,6 +409,42 @@ local function TeleportPlayerBypass(player, target)
     end)
 end
 
+-- New Feature: Ambil Akses Admin
+local function GrantAdminAccess()
+    if not FEBypass.Enabled then
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        -- Cari RemoteEvent atau RemoteFunction yang terkait admin
+        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                if string.find(string.lower(obj.Name), "admin") or string.find(string.lower(obj.Name), "mod") then
+                    if obj:IsA("RemoteEvent") then
+                        obj:FireServer(LocalPlayer, true) -- Coba aktifkan admin
+                    elseif obj:IsA("RemoteFunction") then
+                        obj:InvokeServer(LocalPlayer, true)
+                    end
+                end
+            end
+        end
+        
+        -- Manipulasi properti Player jika ada
+        if LocalPlayer:FindFirstChild("PlayerGui") then
+            for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") then
+                    gui.Enabled = true
+                end
+            end
+        end
+        
+        -- Tambahan: Coba set properti admin jika ada
+        LocalPlayer:SetAttribute("IsAdmin", true)
+        print("👑 Admin access attempted! Check if admin privileges are granted.")
+    end)
+end
+
 -- Update content function with optimized scrolling
 function UpdateContent()
     for _, child in pairs(ScrollFrame:GetChildren()) do
@@ -621,6 +657,9 @@ function UpdateContent()
                 end
             end)
         end, Colors.Purple)
+        CreateButton("👑 Grant Admin Access", function()
+            GrantAdminAccess()
+        end, Colors.Yellow)
     end
 end
 
@@ -694,7 +733,7 @@ end)
 -- Auto refresh player lists
 spawn(function()
     while ScreenGui.Parent do
-        wait(5) -- Refresh lebih cepat (setiap 5 detik)
+        wait(5)
         if currentTab == 2 or currentTab == 3 then
             UpdateContent()
         end
@@ -769,4 +808,5 @@ end
 print("🔥 FE Bypass Admin Panel loaded!")
 print("📱 Mobile optimized with full player visibility")
 print("🛡️ Enable FE Bypass for all features")
+print("👑 New: Grant Admin Access in Bypass tab")
 print("🎮 Use WASD/QE for fly controls when flying")
