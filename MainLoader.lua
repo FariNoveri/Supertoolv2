@@ -1,11 +1,11 @@
--- Server-Side Mobile Admin GUI Script
--- Requires admin privileges or FE disabled server for full functionality
+-- FE Bypass Mobile Admin GUI Script
+-- Advanced bypasses and exploits for mobile
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local InsertService = game:GetService("InsertService")
+local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
@@ -14,6 +14,14 @@ local LocalPlayer = Players.LocalPlayer
 -- Global untuk Script 1
 _G.Script1Active = _G.Script1Active or false
 _G.Script1Gui = _G.Script1Gui or nil
+
+-- FE Bypass Variables
+local FEBypass = {
+    Enabled = false,
+    OldCharacter = nil,
+    FakeCharacter = nil,
+    Connections = {}
+}
 
 -- Warna tema
 local Colors = {
@@ -25,21 +33,23 @@ local Colors = {
     Red = Color3.fromRGB(244, 67, 54),
     Purple = Color3.fromRGB(156, 39, 176),
     Pink = Color3.fromRGB(233, 30, 99),
+    Cyan = Color3.fromRGB(0, 188, 212),
+    Yellow = Color3.fromRGB(255, 235, 59),
     White = Color3.fromRGB(255, 255, 255),
     Gray = Color3.fromRGB(150, 150, 150)
 }
 
 -- GUI utama
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ServerSideAdminGui"
+ScreenGui.Name = "FEBypassAdminGui"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = LocalPlayer.PlayerGui
 
 -- Frame utama
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 340, 0, 480)
-MainFrame.Position = UDim2.new(0.5, -170, 0.5, -240)
+MainFrame.Size = UDim2.new(0, 350, 0, 500)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250)
 MainFrame.BackgroundColor3 = Colors.Dark
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
@@ -71,12 +81,27 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -80, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "🛡️ Server Admin Panel"
+Title.Text = "🔥 FE Bypass Admin"
 Title.TextColor3 = Colors.White
 Title.TextSize = 16
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Font = Enum.Font.GothamBold
 Title.Parent = Header
+
+-- Status indicator
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(0, 60, 0, 20)
+Status.Position = UDim2.new(1, -140, 0, 5)
+Status.BackgroundColor3 = Colors.Red
+Status.Text = "FE ON"
+Status.TextColor3 = Colors.White
+Status.TextSize = 10
+Status.Font = Enum.Font.Gotham
+Status.Parent = Header
+
+local StatusCorner = Instance.new("UICorner")
+StatusCorner.CornerRadius = UDim.new(0, 10)
+StatusCorner.Parent = Status
 
 -- Tombol kontrol
 local MinBtn = Instance.new("TextButton")
@@ -116,44 +141,60 @@ Content.Position = UDim2.new(0, 0, 0, 50)
 Content.BackgroundTransparency = 1
 Content.Parent = MainFrame
 
--- Script 1 kontrol
-local Script1Frame = Instance.new("Frame")
-Script1Frame.Size = UDim2.new(1, -20, 0, 45)
-Script1Frame.Position = UDim2.new(0, 10, 0, 10)
-Script1Frame.BackgroundColor3 = Colors.Surface
-Script1Frame.BorderSizePixel = 0
-Script1Frame.Parent = Content
+-- Script 1 kontrol + FE Bypass toggle
+local ControlFrame = Instance.new("Frame")
+ControlFrame.Size = UDim2.new(1, -20, 0, 90)
+ControlFrame.Position = UDim2.new(0, 10, 0, 10)
+ControlFrame.BackgroundColor3 = Colors.Surface
+ControlFrame.BorderSizePixel = 0
+ControlFrame.Parent = Content
 
-local S1Corner = Instance.new("UICorner")
-S1Corner.CornerRadius = UDim.new(0, 10)
-S1Corner.Parent = Script1Frame
+local ControlCorner = Instance.new("UICorner")
+ControlCorner.CornerRadius = UDim.new(0, 10)
+ControlCorner.Parent = ControlFrame
 
 local SwitchBtn = Instance.new("TextButton")
-SwitchBtn.Size = UDim2.new(1, -10, 1, -10)
+SwitchBtn.Size = UDim2.new(1, -10, 0, 35)
 SwitchBtn.Position = UDim2.new(0, 5, 0, 5)
 SwitchBtn.BackgroundColor3 = Colors.Primary
 SwitchBtn.BorderSizePixel = 0
 SwitchBtn.Text = "🔄 Matikan Script 1"
 SwitchBtn.TextColor3 = Colors.White
-SwitchBtn.TextSize = 14
+SwitchBtn.TextSize = 13
 SwitchBtn.Font = Enum.Font.Gotham
-SwitchBtn.Parent = Script1Frame
+SwitchBtn.Parent = ControlFrame
 
 local SwitchCorner = Instance.new("UICorner")
 SwitchCorner.CornerRadius = UDim.new(0, 8)
 SwitchCorner.Parent = SwitchBtn
 
--- Tab system - 6 tabs untuk server-side
+-- FE Bypass Toggle Button
+local BypassBtn = Instance.new("TextButton")
+BypassBtn.Size = UDim2.new(1, -10, 0, 35)
+BypassBtn.Position = UDim2.new(0, 5, 0, 45)
+BypassBtn.BackgroundColor3 = Colors.Red
+BypassBtn.BorderSizePixel = 0
+BypassBtn.Text = "🛡️ Enable FE Bypass"
+BypassBtn.TextColor3 = Colors.White
+BypassBtn.TextSize = 13
+BypassBtn.Font = Enum.Font.Gotham
+BypassBtn.Parent = ControlFrame
+
+local BypassCorner = Instance.new("UICorner")
+BypassCorner.CornerRadius = UDim.new(0, 8)
+BypassCorner.Parent = BypassBtn
+
+-- Tab system - Fixed horizontal scroll
 local TabFrame = Instance.new("ScrollingFrame")
 TabFrame.Size = UDim2.new(1, -20, 0, 40)
-TabFrame.Position = UDim2.new(0, 10, 0, 65)
+TabFrame.Position = UDim2.new(0, 10, 0, 110)
 TabFrame.BackgroundTransparency = 1
 TabFrame.ScrollBarThickness = 0
 TabFrame.ScrollingDirection = Enum.ScrollingDirection.X
-TabFrame.CanvasSize = UDim2.new(0, 600, 0, 40)
+TabFrame.CanvasSize = UDim2.new(0, 700, 0, 40)
 TabFrame.Parent = Content
 
-local tabs = {"Spawn", "Player", "Teleport", "Server", "Fun", "Utility"}
+local tabs = {"Spawn", "Player", "Teleport", "Server", "Fun", "Utility", "Bypass"}
 local tabButtons = {}
 local currentTab = 1
 
@@ -182,14 +223,16 @@ for i, tabName in pairs(tabs) do
     end)
 end
 
--- Scrolling frame untuk konten
+-- FIXED Scrolling frame untuk konten
 local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Size = UDim2.new(1, -20, 1, -115)
-ScrollFrame.Position = UDim2.new(0, 10, 0, 115)
+ScrollFrame.Size = UDim2.new(1, -20, 1, -160)
+ScrollFrame.Position = UDim2.new(0, 10, 0, 160)
 ScrollFrame.BackgroundColor3 = Colors.Surface
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 8
 ScrollFrame.ScrollBarImageColor3 = Colors.Primary
+ScrollFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 ScrollFrame.Parent = Content
 
 local ScrollCorner = Instance.new("UICorner")
@@ -200,6 +243,11 @@ local Layout = Instance.new("UIListLayout")
 Layout.SortOrder = Enum.SortOrder.LayoutOrder
 Layout.Padding = UDim.new(0, 5)
 Layout.Parent = ScrollFrame
+
+-- Update canvas size automatically
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 10)
+end)
 
 -- Update tabs function
 function UpdateTabs()
@@ -242,128 +290,198 @@ local function CreateButton(text, callback, color)
     return btn
 end
 
--- Server-Side Functions
-local function SpawnAsset(assetId, position)
+-- FE Bypass Functions
+local function EnableFEBypass()
+    if FEBypass.Enabled then return end
+    
+    FEBypass.Enabled = true
+    Status.Text = "BYPASS"
+    Status.BackgroundColor3 = Colors.Green
+    BypassBtn.Text = "🛡️ Disable FE Bypass"
+    BypassBtn.BackgroundColor3 = Colors.Green
+    
+    -- Create invisible character
     pcall(function()
-        local asset = InsertService:LoadAsset(assetId)
-        if asset then
-            asset.Parent = Workspace
-            if position and asset.PrimaryPart then
-                asset:SetPrimaryPartCFrame(CFrame.new(position))
-            elseif LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                asset:MoveTo(LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, 5, 10))
+        if LocalPlayer.Character then
+            FEBypass.OldCharacter = LocalPlayer.Character
+            
+            -- Make character invisible to server
+            for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 1
+                    if part.Name == "Head" then
+                        for _, child in pairs(part:GetChildren()) do
+                            if child:IsA("Decal") then
+                                child.Transparency = 1
+                            end
+                        end
+                    end
+                end
+                if part:IsA("Accessory") then
+                    for _, accessoryPart in pairs(part:GetChildren()) do
+                        if accessoryPart:IsA("BasePart") then
+                            accessoryPart.Transparency = 1
+                        end
+                    end
+                end
             end
-            print("✅ Spawned asset: " .. assetId)
+            
+            -- Create fake character for local display
+            FEBypass.FakeCharacter = FEBypass.OldCharacter:Clone()
+            FEBypass.FakeCharacter.Parent = workspace
+            FEBypass.FakeCharacter.Name = LocalPlayer.Name .. "_Fake"
+            
+            -- Make fake character visible only locally
+            for _, part in pairs(FEBypass.FakeCharacter:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                    part.Anchored = true
+                end
+            end
         end
     end)
+    
+    print("🛡️ FE Bypass enabled!")
 end
 
-local function KillPlayer(player)
-    if player.Character and player.Character:FindFirstChild("Humanoid") then
-        player.Character.Humanoid.Health = 0
-        print("💀 Killed: " .. player.Name)
-    end
-end
-
-local function BringPlayer(player)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and 
-       LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        player.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(3, 0, 0)
-        print("✅ Brought: " .. player.Name)
-    end
-end
-
-local function FreezePlayer(player)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        player.Character.HumanoidRootPart.Anchored = true
-        print("🧊 Frozen: " .. player.Name)
-    end
-end
-
-local function UnfreezePlayer(player)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        player.Character.HumanoidRootPart.Anchored = false
-        print("🔥 Unfrozen: " .. player.Name)
-    end
-end
-
-local function KickPlayer(player)
+local function DisableFEBypass()
+    if not FEBypass.Enabled then return end
+    
+    FEBypass.Enabled = false
+    Status.Text = "FE ON"
+    Status.BackgroundColor3 = Colors.Red
+    BypassBtn.Text = "🛡️ Enable FE Bypass"
+    BypassBtn.BackgroundColor3 = Colors.Red
+    
+    -- Restore character visibility
     pcall(function()
-        player:Kick("Kicked by admin")
-        print("👢 Kicked: " .. player.Name)
-    end)
-end
-
-local function ChangeServerSetting(property, value)
-    pcall(function()
-        if property == "TimeOfDay" then
-            Lighting.TimeOfDay = value
-        elseif property == "Brightness" then
-            Lighting.Brightness = value
-        elseif property == "Ambient" then
-            Lighting.Ambient = value
-        elseif property == "FogEnd" then
-            Lighting.FogEnd = value
+        if FEBypass.OldCharacter then
+            for _, part in pairs(FEBypass.OldCharacter:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 0
+                    if part.Name == "Head" then
+                        for _, child in pairs(part:GetChildren()) do
+                            if child:IsA("Decal") then
+                                child.Transparency = 0
+                            end
+                        end
+                    end
+                end
+                if part:IsA("Accessory") then
+                    for _, accessoryPart in pairs(part:GetChildren()) do
+                        if accessoryPart:IsA("BasePart") then
+                            accessoryPart.Transparency = 0
+                        end
+                    end
+                end
+            end
         end
-        print("🌍 Server setting changed: " .. property .. " = " .. tostring(value))
-    end)
-end
-
-local function PlayServerSound(soundId)
-    pcall(function()
-        local sound = Instance.new("Sound")
-        sound.SoundId = "rbxassetid://" .. soundId
-        sound.Volume = 0.5
-        sound.Parent = SoundService
-        sound:Play()
-        print("🔊 Playing server sound: " .. soundId)
         
-        sound.Ended:Connect(function()
-            sound:Destroy()
-        end)
+        if FEBypass.FakeCharacter then
+            FEBypass.FakeCharacter:Destroy()
+            FEBypass.FakeCharacter = nil
+        end
+    end)
+    
+    print("🔒 FE Bypass disabled!")
+end
+
+-- Advanced Bypass Functions
+local function KillPlayerBypass(player)
+    if not FEBypass.Enabled then
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        local character = player.Character
+        if character and character:FindFirstChild("Humanoid") then
+            -- Method 1: Damage bypass
+            character.Humanoid.Health = 0
+            
+            -- Method 2: Remove character parts
+            for _, part in pairs(character:GetChildren()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part:Destroy()
+                end
+            end
+            
+            print("💀 Bypass killed: " .. player.Name)
+        end
     end)
 end
 
-local function CreateExplosion(position, size)
-    local explosion = Instance.new("Explosion")
-    explosion.Position = position
-    explosion.BlastRadius = size or 50
-    explosion.BlastPressure = 500000
-    explosion.Parent = Workspace
-    print("💥 Explosion created at: " .. tostring(position))
+local function TeleportPlayerBypass(player, target)
+    if not FEBypass.Enabled then
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and
+           target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            
+            player.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
+            print("🚀 Bypass TP: " .. player.Name .. " to " .. target.Name)
+        end
+    end)
 end
 
--- Update content function
+local function SpawnBypassItem(itemName)
+    pcall(function()
+        local part = Instance.new("Part")
+        part.Name = itemName
+        part.Size = Vector3.new(4, 4, 4)
+        part.Material = Enum.Material.ForceField
+        part.BrickColor = BrickColor.Random()
+        part.CanCollide = false
+        part.Parent = workspace
+        
+        -- Add special effects
+        local fire = Instance.new("Fire")
+        fire.Size = 10
+        fire.Heat = 15
+        fire.Parent = part
+        
+        local light = Instance.new("PointLight")
+        light.Brightness = 2
+        light.Range = 20
+        light.Color = part.Color
+        light.Parent = part
+        
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            part.Position = LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, 8, 5)
+        end
+        
+        print("✨ Bypass spawned: " .. itemName)
+    end)
+end
+
+-- Update content function with fixed scrolling
 function UpdateContent()
+    -- Clear existing buttons
     for _, child in pairs(ScrollFrame:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
         end
     end
     
-    local contentHeight = 0
-    
     if currentTab == 1 then -- Spawn Tab
-        CreateButton("🏠 Spawn House", function() SpawnAsset(185191046) end, Colors.Green)
-        CreateButton("🚗 Spawn Car", function() SpawnAsset(193503613) end, Colors.Green)
-        CreateButton("✈️ Spawn Plane", function() SpawnAsset(136022555) end, Colors.Green)
-        CreateButton("🚁 Spawn Helicopter", function() SpawnAsset(146477872) end, Colors.Green)
-        CreateButton("🛥️ Spawn Boat", function() SpawnAsset(137735709) end, Colors.Green)
-        CreateButton("🎸 Spawn Guitar", function() SpawnAsset(142314093) end, Colors.Green)
-        CreateButton("⚔️ Spawn Sword", function() SpawnAsset(125013769) end, Colors.Red)
-        CreateButton("🔫 Spawn Gun", function() SpawnAsset(130113146) end, Colors.Red)
-        contentHeight = 8 * 45
+        CreateButton("📦 Bypass Neon Box", function() SpawnBypassItem("Neon Box") end, Colors.Green)
+        CreateButton("🔥 Fire Part", function() SpawnBypassItem("Fire Part") end, Colors.Red)
+        CreateButton("⚡ Lightning Ball", function() SpawnBypassItem("Lightning Ball") end, Colors.Yellow)
+        CreateButton("🌟 Star Object", function() SpawnBypassItem("Star") end, Colors.Pink)
+        CreateButton("💎 Diamond", function() SpawnBypassItem("Diamond") end, Colors.Cyan)
+        CreateButton("🌈 Rainbow Block", function() SpawnBypassItem("Rainbow Block") end, Colors.Purple)
         
     elseif currentTab == 2 then -- Player Tab
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 CreateButton("👤 " .. player.Name, function() end, Colors.Gray)
-                CreateButton("💀 Kill " .. player.Name, function() KillPlayer(player) end, Colors.Red)
-                CreateButton("📞 Bring " .. player.Name, function() BringPlayer(player) end, Colors.Orange)
-                CreateButton("🧊 Freeze " .. player.Name, function() FreezePlayer(player) end, Colors.Primary)
-                CreateButton("🔥 Unfreeze " .. player.Name, function() UnfreezePlayer(player) end, Colors.Green)
-                CreateButton("👢 Kick " .. player.Name, function() KickPlayer(player) end, Colors.Red)
-                contentHeight = contentHeight + 6 * 45
+                CreateButton("💀 Bypass Kill " .. player.Name, function() KillPlayerBypass(player) end, Colors.Red)
+                CreateButton("📞 TP " .. player.Name .. " to Me", function()
+                    TeleportPlayerBypass(player, LocalPlayer)
+                end, Colors.Orange)
             end
         end
         
@@ -376,52 +494,94 @@ function UpdateContent()
                         LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
                     end
                 end, Colors.Primary)
-                contentHeight = contentHeight + 45
             end
         end
-        
         CreateButton("🌍 TP to Spawn", function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10, 0)
             end
         end, Colors.Green)
-        contentHeight = contentHeight + 45
         
     elseif currentTab == 4 then -- Server Tab
-        CreateButton("☀️ Day Time", function() ChangeServerSetting("TimeOfDay", "12:00:00") end, Colors.Orange)
-        CreateButton("🌙 Night Time", function() ChangeServerSetting("TimeOfDay", "00:00:00") end, Colors.Purple)
-        CreateButton("🌅 Sunrise", function() ChangeServerSetting("TimeOfDay", "06:00:00") end, Colors.Pink)
-        CreateButton("🌆 Sunset", function() ChangeServerSetting("TimeOfDay", "18:00:00") end, Colors.Red)
-        CreateButton("💡 Max Brightness", function() ChangeServerSetting("Brightness", 3) end, Colors.Orange)
-        CreateButton("🌑 No Brightness", function() ChangeServerSetting("Brightness", 0) end, Colors.Gray)
-        CreateButton("🌫️ Add Fog", function() ChangeServerSetting("FogEnd", 50) end, Colors.Gray)
-        CreateButton("🌤️ Clear Fog", function() ChangeServerSetting("FogEnd", 100000) end, Colors.Primary)
-        contentHeight = 8 * 45
+        CreateButton("☀️ Day Time", function()
+            Lighting.TimeOfDay = "12:00:00"
+        end, Colors.Orange)
+        CreateButton("🌙 Night Time", function()
+            Lighting.TimeOfDay = "00:00:00"
+        end, Colors.Purple)
+        CreateButton("💡 Max Brightness", function()
+            Lighting.Brightness = 3
+        end, Colors.Yellow)
+        CreateButton("🌑 Dark Mode", function()
+            Lighting.Brightness = 0
+        end, Colors.Gray)
+        CreateButton("🌫️ Heavy Fog", function()
+            Lighting.FogEnd = 50
+        end, Colors.Gray)
+        CreateButton("🌤️ Clear Sky", function()
+            Lighting.FogEnd = 100000
+        end, Colors.Cyan)
         
     elseif currentTab == 5 then -- Fun Tab
-        CreateButton("🎵 Play Music 1", function() PlayServerSound("142376088") end, Colors.Pink)
-        CreateButton("🎵 Play Music 2", function() PlayServerSound("131961136") end, Colors.Pink)
-        CreateButton("📢 Loud Sound", function() PlayServerSound("138081500") end, Colors.Red)
-        CreateButton("💥 Explosion at Me", function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                CreateExplosion(LocalPlayer.Character.HumanoidRootPart.Position, 30)
-            end
+        CreateButton("🎵 Earrape Music", function()
+            pcall(function()
+                local sound = Instance.new("Sound")
+                sound.SoundId = "rbxassetid://142376088"
+                sound.Volume = 1
+                sound.Looped = true
+                sound.Parent = workspace
+                sound:Play()
+            end)
+        end, Colors.Pink)
+        
+        CreateButton("💥 Explosion Rain", function()
+            spawn(function()
+                for i = 1, 20 do
+                    local explosion = Instance.new("Explosion")
+                    explosion.Position = Vector3.new(math.random(-100, 100), 50, math.random(-100, 100))
+                    explosion.BlastRadius = 30
+                    explosion.Parent = workspace
+                    wait(0.1)
+                end
+            end)
         end, Colors.Red)
-        CreateButton("💥💥 Big Explosion", function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                CreateExplosion(LocalPlayer.Character.HumanoidRootPart.Position, 100)
-            end
-        end, Colors.Red)
+        
         CreateButton("🌈 Rainbow Lighting", function()
             spawn(function()
-                for i = 1, 10 do
-                    Lighting.Ambient = Color3.fromHSV(i/10, 1, 1)
+                for i = 1, 20 do
+                    Lighting.Ambient = Color3.fromHSV(i/20, 1, 1)
                     wait(0.5)
                 end
                 Lighting.Ambient = Color3.fromRGB(128, 128, 128)
             end)
         end, Colors.Purple)
-        contentHeight = 6 * 45
+        
+        CreateButton("⚡ Lightning Storm", function()
+            spawn(function()
+                for i = 1, 10 do
+                    local part = Instance.new("Part")
+                    part.Size = Vector3.new(1, 100, 1)
+                    part.Material = Enum.Material.Neon
+                    part.BrickColor = BrickColor.new("Electric blue")
+                    part.Anchored = true
+                    part.Position = Vector3.new(math.random(-50, 50), 50, math.random(-50, 50))
+                    part.Parent = workspace
+                    
+                    wait(0.1)
+                    part:Destroy()
+                    wait(0.2)
+                end
+            end)
+        end, Colors.Yellow)
+        
+        CreateButton("🔊 Stop All Sounds", function()
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj:IsA("Sound") then
+                    obj:Stop()
+                    obj:Destroy()
+                end
+            end
+        end, Colors.Gray)
         
     elseif currentTab == 6 then -- Utility Tab
         CreateButton("🔄 Rejoin Server", function()
@@ -436,32 +596,189 @@ function UpdateContent()
         
         CreateButton("⚡ Super Speed", function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                LocalPlayer.Character.Humanoid.WalkSpeed = 100
+                LocalPlayer.Character.Humanoid.WalkSpeed = 150
+                print("✅ Super speed: 150")
             end
         end, Colors.Green)
         
         CreateButton("🐌 Normal Speed", function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                 LocalPlayer.Character.Humanoid.WalkSpeed = 16
+                print("✅ Normal speed: 16")
             end
         end, Colors.Gray)
         
         CreateButton("🦘 Super Jump", function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                LocalPlayer.Character.Humanoid.JumpPower = 100
+                LocalPlayer.Character.Humanoid.JumpPower = 150
+                print("✅ Super jump: 150")
             end
         end, Colors.Green)
         
-        CreateButton("👤 Normal Jump", function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                LocalPlayer.Character.Humanoid.JumpPower = 50
+        CreateButton("🚀 Fly Mode", function()
+            -- Simple fly script
+            local flying = false
+            local speed = 50
+            local bodyVelocity, bodyGyro
+            
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+                
+                if not flying then
+                    flying = true
+                    
+                    bodyVelocity = Instance.new("BodyVelocity")
+                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+                    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+                    bodyVelocity.Parent = humanoidRootPart
+                    
+                    bodyGyro = Instance.new("BodyGyro")
+                    bodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
+                    bodyGyro.CFrame = humanoidRootPart.CFrame
+                    bodyGyro.Parent = humanoidRootPart
+                    
+                    print("🚀 Flying enabled!")
+                else
+                    flying = false
+                    if bodyVelocity then bodyVelocity:Destroy() end
+                    if bodyGyro then bodyGyro:Destroy() end
+                    print("🚀 Flying disabled!")
+                end
             end
-        end, Colors.Gray)
+        end, Colors.Cyan)
         
-        contentHeight = 6 * 45
+        CreateButton("👻 Noclip Toggle", function()
+            local noclip = false
+            local character = LocalPlayer.Character
+            
+            if character then
+                noclip = not noclip
+                for _, part in pairs(character:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = not noclip
+                    end
+                end
+                print("👻 Noclip: " .. (noclip and "ON" or "OFF"))
+            end
+        end, Colors.Purple)
+        
+    elseif currentTab == 7 then -- Bypass Tab
+        CreateButton("🛡️ Advanced FE Bypass", function()
+            if FEBypass.Enabled then
+                DisableFEBypass()
+            else
+                EnableFEBypass()
+            end
+        end, FEBypass.Enabled and Colors.Green or Colors.Red)
+        
+        CreateButton("👻 Invisible Mode", function()
+            pcall(function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Transparency = part.Transparency == 0 and 1 or 0
+                        end
+                    end
+                    print("👻 Invisibility toggled!")
+                end
+            end)
+        end, Colors.Purple)
+        
+        CreateButton("🔥 Godmode", function()
+            pcall(function()
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    LocalPlayer.Character.Humanoid.MaxHealth = math.huge
+                    LocalPlayer.Character.Humanoid.Health = math.huge
+                    print("🔥 Godmode enabled!")
+                end
+            end)
+        end, Colors.Orange)
+        
+        CreateButton("💫 Infinite Jump", function()
+            local InfiniteJumpEnabled = true
+            game:GetService("UserInputService").JumpRequest:connect(function()
+                if InfiniteJumpEnabled then
+                    game:GetService("Players").LocalPlayer.Character:FindFirstChildOfClass('Humanoid'):ChangeState("Jumping")
+                end
+            end)
+            print("💫 Infinite jump enabled!")
+        end, Colors.Cyan)
+        
+        CreateButton("🌟 ESP Players", function()
+            -- Simple ESP
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Size = UDim2.new(0, 100, 0, 50)
+                    billboard.StudsOffset = Vector3.new(0, 2, 0)
+                    billboard.Parent = player.Character.Head
+                    
+                    local nameLabel = Instance.new("TextLabel")
+                    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+                    nameLabel.BackgroundTransparency = 1
+                    nameLabel.Text = player.Name
+                    nameLabel.TextColor3 = Colors.White
+                    nameLabel.TextStrokeTransparency = 0
+                    nameLabel.TextScaled = true
+                    nameLabel.Font = Enum.Font.GothamBold
+                    nameLabel.Parent = billboard
+                end
+            end
+            print("🌟 ESP enabled for all players!")
+        end, Colors.Yellow)
+        
+        CreateButton("🎯 Aimbot (Simple)", function()
+            local aimbot = not (_G.AimbotEnabled or false)
+            _G.AimbotEnabled = aimbot
+            
+            if aimbot then
+                spawn(function()
+                    while _G.AimbotEnabled do
+                        local closestPlayer = nil
+                        local shortestDistance = math.huge
+                        
+                        for _, player in pairs(Players:GetPlayers()) do
+                            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+                                local distance = (LocalPlayer.Character.HumanoidRootPart.Position - player.Character.Head.Position).Magnitude
+                                if distance < shortestDistance then
+                                    shortestDistance = distance
+                                    closestPlayer = player
+                                end
+                            end
+                        end
+                        
+                        if closestPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            local lookDirection = (closestPlayer.Character.Head.Position - LocalPlayer.Character.HumanoidRootPart.Position).Unit
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.lookAt(LocalPlayer.Character.HumanoidRootPart.Position, closestPlayer.Character.Head.Position)
+                        end
+                        
+                        wait(0.1)
+                    end
+                end)
+                print("🎯 Aimbot enabled!")
+            else
+                print("🎯 Aimbot disabled!")
+            end
+        end, Colors.Red)
+        
+        CreateButton("🔧 Anti-Kick", function()
+            -- Hook kick function
+            local mt = getrawmetatable(game)
+            local old = mt.__namecall
+            setreadonly(mt, false)
+            
+            mt.__namecall = newcclosure(function(self, ...)
+                local method = getnamecallmethod()
+                if method == "Kick" then
+                    print("🔧 Kick attempt blocked!")
+                    return
+                end
+                return old(self, ...)
+            end)
+            
+            print("🔧 Anti-kick enabled!")
+        end, Colors.Green)
     end
-    
-    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 20)
 end
 
 -- Touch-friendly dragging
@@ -494,13 +811,17 @@ end)
 local isMinimized = false
 MinBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
-    local targetSize = isMinimized and UDim2.new(0, 340, 0, 50) or UDim2.new(0, 340, 0, 480)
+    local targetSize = isMinimized and UDim2.new(0, 350, 0, 50) or UDim2.new(0, 350, 0, 500)
     TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = targetSize}):Play()
     wait(0.1)
     Content.Visible = not isMinimized
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
+    -- Clean up bypass
+    if FEBypass.Enabled then
+        DisableFEBypass()
+    end
     ScreenGui:Destroy()
 end)
 
@@ -519,7 +840,16 @@ SwitchBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Auto refresh
+-- FE Bypass toggle
+BypassBtn.MouseButton1Click:Connect(function()
+    if FEBypass.Enabled then
+        DisableFEBypass()
+    else
+        EnableFEBypass()
+    end
+end)
+
+-- Auto refresh player lists
 spawn(function()
     while ScreenGui.Parent do
         wait(15)
@@ -529,13 +859,84 @@ spawn(function()
     end
 end)
 
+-- Fly controls (WASD when flying)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.A or 
+       input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.D or
+       input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.E then
+        
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local humanoidRootPart = character.HumanoidRootPart
+            local bodyVelocity = humanoidRootPart:FindFirstChild("BodyVelocity")
+            
+            if bodyVelocity then
+                local camera = workspace.CurrentCamera
+                local moveVector = Vector3.new(0, 0, 0)
+                
+                if input.KeyCode == Enum.KeyCode.W then
+                    moveVector = moveVector + camera.CFrame.LookVector
+                elseif input.KeyCode == Enum.KeyCode.S then
+                    moveVector = moveVector - camera.CFrame.LookVector
+                elseif input.KeyCode == Enum.KeyCode.A then
+                    moveVector = moveVector - camera.CFrame.RightVector
+                elseif input.KeyCode == Enum.KeyCode.D then
+                    moveVector = moveVector + camera.CFrame.RightVector
+                elseif input.KeyCode == Enum.KeyCode.Q then
+                    moveVector = moveVector - camera.CFrame.UpVector
+                elseif input.KeyCode == Enum.KeyCode.E then
+                    moveVector = moveVector + camera.CFrame.UpVector
+                end
+                
+                bodyVelocity.Velocity = moveVector * 50
+            end
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.A or 
+       input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.D or
+       input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.E then
+        
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local bodyVelocity = character.HumanoidRootPart:FindFirstChild("BodyVelocity")
+            if bodyVelocity then
+                bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end
+    end
+end)
+
 -- Initialize
 UpdateTabs()
 UpdateContent()
 
+-- Handle Script 1
 if _G.Script1Active and _G.Script1Gui then
     _G.Script1Active = false
     _G.Script1Gui.Visible = false
 end
 
-print("🛡️ Server-Side Admin Panel loaded! Full server control features enabled.")
+-- Welcome message
+print("🔥 FE Bypass Admin Panel loaded!")
+print("📱 Mobile optimized with advanced bypasses")
+print("🛡️ Enable FE Bypass for full functionality")
+print("🎮 Use WASD/QE for fly controls when flying")
+
+-- Easter egg
+spawn(function()
+    wait(2)
+    Title.Text = "🔥 FE Bypass Admin"
+    wait(1)
+    Title.Text = "🛡️ FE Bypass Admin"
+    wait(1)
+    Title.Text = "⚡ FE Bypass Admin"
+    wait(1)
+    Title.Text = "🔥 FE Bypass Admin"
+end)
