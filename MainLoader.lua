@@ -74,7 +74,7 @@ SwitchButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Item Spawner
+-- Item Spawner Functions
 local function ScanServerForModels()
     local models = {}
     for _, obj in pairs(Workspace:GetDescendants()) do
@@ -83,7 +83,7 @@ local function ScanServerForModels()
         end
     end
     for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("Model") then
+        if obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") then
             table.insert(models, obj.Name)
         end
     end
@@ -92,14 +92,20 @@ end
 
 local PredefinedModels = {
     {Name = "Modern House", AssetId = 123456789},
-    {Name = "Castle", AssetId = 987654321}
+    {Name = "Castle", AssetId = 987654321},
+    {Name = "Skyscraper", AssetId = 456789123}
 }
 
 local function SpawnModel(modelName, isPredefined, position)
     if isPredefined then
-        local model = InsertService:LoadAsset(PredefinedModels[modelName].AssetId)
-        model.Parent = Workspace
-        model:MoveTo(position or LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, 5, 10))
+        for _, model in pairs(PredefinedModels) do
+            if model.Name == modelName then
+                local asset = InsertService:LoadAsset(model.AssetId)
+                asset.Parent = Workspace
+                asset:MoveTo(position or LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, 5, 10))
+                break
+            end
+        end
     else
         local model = Workspace:FindFirstChild(modelName) or ReplicatedStorage:FindFirstChild(modelName)
         if model then
@@ -138,12 +144,13 @@ end
 -- GUI Population
 local function PopulateGUI()
     local yOffset = 0
-    -- Item Spawner
-    local ItemLabel = Instance.new("TextLabel")
-    ItemLabel.Size = UDim2.new(1, -10, 0, 30)
-    ItemLabel.Position = UDim2.new(0, 5, 0, yOffset)
-    ItemLabel.Text = "Item Spawner"
-    ItemLabel.Parent = ScrollingFrame
+
+    -- Item Spawner: Auto-Detect
+    local ItemAutoLabel = Instance.new("TextLabel")
+    ItemAutoLabel.Size = UDim2.new(1, -10, 0, 30)
+    ItemAutoLabel.Position = UDim2.new(0, 5, 0, yOffset)
+    ItemAutoLabel.Text = "Item Spawner: Auto-Detect"
+    ItemAutoLabel.Parent = ScrollingFrame
     yOffset = yOffset + 35
 
     for _, model in pairs(ScanServerForModels()) do
@@ -154,6 +161,26 @@ local function PopulateGUI()
         button.Parent = ScrollingFrame
         button.MouseButton1Click:Connect(function()
             SpawnModel(model, false)
+        end)
+        yOffset = yOffset + 35
+    end
+
+    -- Item Spawner: Predefined
+    local ItemPredefinedLabel = Instance.new("TextLabel")
+    ItemPredefinedLabel.Size = UDim2.new(1, -10, 0, 30)
+    ItemPredefinedLabel.Position = UDim2.new(0, 5, 0, yOffset)
+    ItemPredefinedLabel.Text = "Item Spawner: Predefined"
+    ItemPredefinedLabel.Parent = ScrollingFrame
+    yOffset = yOffset + 35
+
+    for _, model in pairs(PredefinedModels) do
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, -10, 0, 30)
+        button.Position = UDim2.new(0, 5, 0, yOffset)
+        button.Text = "Spawn " .. model.Name
+        button.Parent = ScrollingFrame
+        button.MouseButton1Click:Connect(function()
+            SpawnModel(model.Name, true)
         end)
         yOffset = yOffset + 35
     end
@@ -178,12 +205,32 @@ local function PopulateGUI()
         yOffset = yOffset + 35
     end
 
-    -- Teleport
-    local TeleportLabel = Instance.new("TextLabel")
-    TeleportLabel.Size = UDim2.new(1, -10, 0, 30)
-    TeleportLabel.Position = UDim2.new(0, 5, 0, yOffset)
-    TeleportLabel.Text = "Teleport"
-    TeleportLabel.Parent = ScrollingFrame
+    -- Teleport: To Me
+    local TeleportToMeLabel = Instance.new("TextLabel")
+    TeleportToMeLabel.Size = UDim2.new(1, -10, 0, 30)
+    TeleportToMeLabel.Position = UDim2.new(0, 5, 0, yOffset)
+    TeleportToMeLabel.Text = "Teleport Player to Me"
+    TeleportToMeLabel.Parent = ScrollingFrame
+    yOffset = yOffset + 35
+
+    for _, player in pairs(Players:GetPlayers()) do
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, -10, 0, 30)
+        button.Position = UDim2.new(0, 5, 0, yOffset)
+        button.Text = "Teleport " .. player.Name .. " to Me"
+        button.Parent = ScrollingFrame
+        button.MouseButton1Click:Connect(function()
+            TeleportPlayerToMe(player)
+        end)
+        yOffset = yOffset + 35
+    end
+
+    -- Teleport: To Other
+    local TeleportToOtherLabel = Instance.new("TextLabel")
+    TeleportToOtherLabel.Size = UDim2.new(1, -10, 0, 30)
+    TeleportToOtherLabel.Position = UDim2.new(0, 5, 0, yOffset)
+    TeleportToOtherLabel.Text = "Teleport to Other Player"
+    TeleportToOtherLabel.Parent = ScrollingFrame
     yOffset = yOffset + 35
 
     for _, player in pairs(Players:GetPlayers()) do
@@ -196,6 +243,30 @@ local function PopulateGUI()
             TeleportToPlayer(player)
         end)
         yOffset = yOffset + 35
+    end
+
+    -- Teleport: Player to Player
+    local TeleportPlayerToPlayerLabel = Instance.new("TextLabel")
+    TeleportPlayerToPlayerLabel.Size = UDim2.new(1, -10, 0, 30)
+    TeleportPlayerToPlayerLabel.Position = UDim2.new(0, 5, 0, yOffset)
+    TeleportPlayerToPlayerLabel.Text = "Teleport Player to Player"
+    TeleportPlayerToPlayerLabel.Parent = ScrollingFrame
+    yOffset = yOffset + 35
+
+    for _, sourcePlayer in pairs(Players:GetPlayers()) do
+        for _, targetPlayer in pairs(Players:GetPlayers()) do
+            if sourcePlayer ~= targetPlayer then
+                local button = Instance.new("TextButton")
+                button.Size = UDim2.new(1, -10, 0, 30)
+                button.Position = UDim2.new(0, 5, 0, yOffset)
+                button.Text = "Teleport " .. sourcePlayer.Name .. " to " .. targetPlayer.Name
+                button.Parent = ScrollingFrame
+                button.MouseButton1Click:Connect(function()
+                    TeleportPlayerToPlayer(sourcePlayer, targetPlayer)
+                end)
+                yOffset = yOffset + 35
+            end
+        end
     end
 
     ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset)
