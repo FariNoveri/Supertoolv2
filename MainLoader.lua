@@ -1,5 +1,5 @@
 -- FE Bypass Mobile Admin GUI Script
--- Enhanced with deeper FE bypass, full features, scrolling, and player visibility
+-- Enhanced with notifications, deeper FE bypass, full features, scrolling, and player visibility
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -57,6 +57,41 @@ MainFrame.Parent = ScreenGui
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 15)
 MainCorner.Parent = MainFrame
+
+-- Notifikasi Frame
+local NotificationFrame = Instance.new("Frame")
+NotificationFrame.Size = UDim2.new(0, 300, 0, 50)
+NotificationFrame.Position = UDim2.new(0.5, -150, 0, 10)
+NotificationFrame.BackgroundColor3 = Colors.Surface
+NotificationFrame.BorderSizePixel = 0
+NotificationFrame.Visible = false
+NotificationFrame.Parent = ScreenGui
+
+local NotificationCorner = Instance.new("UICorner")
+NotificationCorner.CornerRadius = UDim.new(0, 10)
+NotificationCorner.Parent = NotificationFrame
+
+local NotificationText = Instance.new("TextLabel")
+NotificationText.Size = UDim2.new(1, -10, 1, -10)
+NotificationText.Position = UDim2.new(0, 5, 0, 5)
+NotificationText.BackgroundTransparency = 1
+NotificationText.Text = ""
+NotificationText.TextColor3 = Colors.White
+NotificationText.TextSize = 12
+NotificationText.Font = Enum.Font.Gotham
+NotificationText.TextWrapped = true
+NotificationText.Parent = NotificationFrame
+
+-- Fungsi untuk menampilkan notifikasi
+local function ShowNotification(message, color, duration)
+    NotificationFrame.BackgroundColor3 = color or Colors.Green
+    NotificationText.Text = message
+    NotificationFrame.Visible = true
+    spawn(function()
+        wait(duration or 3)
+        NotificationFrame.Visible = false
+    end)
+end
 
 -- Header
 local Header = Instance.new("Frame")
@@ -382,6 +417,7 @@ local function EnableFEBypass()
         end
     end)
     
+    ShowNotification("🛡️ FE Bypass enabled!", Colors.Green)
     print("🛡️ FE Bypass enabled!")
 end
 
@@ -423,12 +459,14 @@ local function DisableFEBypass()
         end
     end)
     
+    ShowNotification("🔒 FE Bypass disabled!", Colors.Red)
     print("🔒 FE Bypass disabled!")
 end
 
 -- Teleport Player with Deeper Bypass
 local function TeleportPlayerBypass(player, target)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -442,18 +480,23 @@ local function TeleportPlayerBypass(player, target)
                     obj:FireServer(player, target.Character.HumanoidRootPart.CFrame)
                 end
             end
+            ShowNotification("🚀 Teleported " .. player.Name .. " to " .. target.Name, Colors.Green)
             print("🚀 Bypass TP: " .. player.Name .. " to " .. target.Name)
+        else
+            ShowNotification("❌ Teleport failed: Invalid player!", Colors.Red)
         end
     end)
 end
 
--- Ambil Akses Admin (Enhanced)
+-- Ambil Akses Admin (Enhanced with Notification)
 local function GrantAdminAccess()
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
     
+    local adminSuccess = false
     pcall(function()
         local adminKeywords = {"admin", "mod", "cmd", "command", "privilege", "control", "access", "perm", "role", "owner"}
         local payloads = {true, 1, "admin", "grant", "enable", LocalPlayer.Name, LocalPlayer.UserId, "owner", 999}
@@ -469,8 +512,14 @@ local function GrantAdminAccess()
                             end
                         elseif obj:IsA("RemoteFunction") then
                             for _, payload in pairs(payloads) do
-                                obj:InvokeServer(payload)
-                                obj:InvokeServer(LocalPlayer, payload)
+                                local success, result = pcall(obj.InvokeServer, obj, payload)
+                                if success and (result == true or type(result) == "table" or result == "success") then
+                                    adminSuccess = true
+                                end
+                                success, result = pcall(obj.InvokeServer, obj, LocalPlayer, payload)
+                                if success and (result == true or type(result) == "table" or result == "success") then
+                                    adminSuccess = true
+                                end
                             end
                         end
                     end
@@ -480,8 +529,8 @@ local function GrantAdminAccess()
         
         if LocalPlayer:FindFirstChild("PlayerGui") then
             for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") then
-                    gui.Enabled = true
+                if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") and gui.Enabled then
+                    adminSuccess = true
                 end
             end
         end
@@ -489,13 +538,21 @@ local function GrantAdminAccess()
         LocalPlayer:SetAttribute("IsAdmin", true)
         LocalPlayer:SetAttribute("AdminLevel", 999)
         LocalPlayer:SetAttribute("Role", "Admin")
-        print("👑 Admin access attempted with multiple payloads! Check if privileges are granted.")
+        
+        if adminSuccess or LocalPlayer:GetAttribute("IsAdmin") or LocalPlayer:GetAttribute("AdminLevel") == 999 then
+            ShowNotification("👑 Admin access granted!", Colors.Green)
+            print("👑 Admin access granted!")
+        else
+            ShowNotification("⚠️ Admin access attempt failed!", Colors.Red)
+            print("⚠️ Admin access attempt failed! Check for admin privileges manually.")
+        end
     end)
 end
 
 -- Explosion Features with Particle Effects
 local function SpawnExplosion(position)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -528,12 +585,14 @@ local function SpawnExplosion(position)
                 obj:FireServer(position, 20, 50000)
             end
         end
+        ShowNotification("💥 Explosion spawned!", Colors.Green)
         print("💥 Explosion spawned at: " .. tostring(position))
     end)
 end
 
 local function SpawnCloudExplosion(player)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -568,13 +627,17 @@ local function SpawnCloudExplosion(player)
                     obj:FireServer(position, 30, 30000)
                 end
             end
+            ShowNotification("☁️ Cloud explosion spawned above " .. player.Name, Colors.Green)
             print("☁️ Cloud explosion spawned above: " .. player.Name)
+        else
+            ShowNotification("❌ Cloud explosion failed: Invalid player!", Colors.Red)
         end
     end)
 end
 
 local function SpawnExplosionToPlayer(targetPlayer)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -609,13 +672,17 @@ local function SpawnExplosionToPlayer(targetPlayer)
                     obj:FireServer(position, 15, 40000)
                 end
             end
+            ShowNotification("💥 Explosion targeted at " .. targetPlayer.Name, Colors.Green)
             print("💥 Explosion targeted at: " .. targetPlayer.Name)
+        else
+            ShowNotification("❌ Explosion failed: Invalid player!", Colors.Red)
         end
     end)
 end
 
 local function SpamExplosion(targetPlayer)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -637,7 +704,10 @@ local function SpamExplosion(targetPlayer)
                     obj:FireServer(targetPlayer.Character.HumanoidRootPart.Position, 10, 30000)
                 end
             end
+            ShowNotification("💥 Spam explosion targeted at " .. targetPlayer.Name, Colors.Green)
             print("💥 Spam explosion targeted at: " .. targetPlayer.Name)
+        else
+            ShowNotification("❌ Spam explosion failed: Invalid player!", Colors.Red)
         end
     end)
 end
@@ -645,25 +715,35 @@ end
 -- Kick/Ban Player
 local function KickPlayer(targetPlayer)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
     
     pcall(function()
         local kickKeywords = {"kick", "ban", "remove", "punish"}
+        local success = false
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") and table.find(kickKeywords, string.lower(obj.Name)) then
                 obj:FireServer(targetPlayer, "Kicked by admin")
                 obj:FireServer(targetPlayer.UserId, "Kicked by admin")
+                success = true
             end
         end
-        print("👢 Attempted to kick: " .. targetPlayer.Name)
+        if success then
+            ShowNotification("👢 Kicked " .. targetPlayer.Name, Colors.Green)
+            print("👢 Kicked: " .. targetPlayer.Name)
+        else
+            ShowNotification("⚠️ Kick attempt failed for " .. targetPlayer.Name, Colors.Red)
+            print("⚠️ Kick attempt failed: No valid RemoteEvent found")
+        end
     end)
 end
 
 -- Manipulasi Leaderstats
 local function SetLeaderstats(targetPlayer, statName, value)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -678,8 +758,13 @@ local function SetLeaderstats(targetPlayer, statName, value)
                         obj:FireServer(targetPlayer, statName, value)
                     end
                 end
+                ShowNotification("📊 Set " .. statName .. " to " .. value .. " for " .. targetPlayer.Name, Colors.Green)
                 print("📊 Set " .. statName .. " to " .. value .. " for: " .. targetPlayer.Name)
+            else
+                ShowNotification("⚠️ Stat " .. statName .. " not found!", Colors.Red)
             end
+        else
+            ShowNotification("⚠️ Leaderstats not found for " .. targetPlayer.Name, Colors.Red)
         end
     end)
 end
@@ -687,6 +772,7 @@ end
 -- Spawn Tool
 local function SpawnTool()
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
@@ -702,6 +788,7 @@ local function SpawnTool()
         handle.Material = Enum.Material.Metal
         handle.Parent = tool
         tool.Parent = LocalPlayer.Backpack
+        ShowNotification("🗡️ Spawned Admin Sword", Colors.Green)
         print("🗡️ Spawned Admin Sword")
     end)
 end
@@ -709,38 +796,59 @@ end
 -- Server Shutdown
 local function ServerShutdown()
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
     
     pcall(function()
         local shutdownKeywords = {"shutdown", "close", "end", "stop"}
+        local success = false
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") and table.find(shutdownKeywords, string.lower(obj.Name)) then
                 obj:FireServer()
+                success = true
             end
         end
-        print("🛑 Attempted server shutdown")
+        if success then
+            ShowNotification("🛑 Server shutdown attempted!", Colors.Green)
+            print("🛑 Server shutdown attempted")
+        else
+            ShowNotification("⚠️ Server shutdown failed: No valid RemoteEvent!", Colors.Red)
+            print("⚠️ Server shutdown failed: No valid RemoteEvent")
+        end
     end)
 end
 
 -- Admin Command Input
 local function RunAdminCommand(command)
     if not FEBypass.Enabled then
+        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
         print("❌ Enable FE Bypass first!")
         return
     end
     
     pcall(function()
         local cmdKeywords = {"cmd", "command", "admin", "execute"}
+        local success = false
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") and table.find(cmdKeywords, string.lower(obj.Name)) then
                 obj:FireServer(command)
+                success = true
             elseif obj:IsA("RemoteFunction") then
-                obj:InvokeServer(command)
+                local invokeSuccess, result = pcall(obj.InvokeServer, obj, command)
+                if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                    success = true
+                end
             end
         end
-        print("📜 Executed command: " .. command)
+        if success then
+            ShowNotification("📜 Command executed: " .. command, Colors.Green)
+            print("📜 Executed command: " .. command)
+        else
+            ShowNotification("⚠️ Command failed: " .. command, Colors.Red)
+            print("⚠️ Command failed: No valid RemoteEvent/Function")
+        end
     end)
 end
 
@@ -754,7 +862,7 @@ function UpdateContent()
     
     if currentTab == 1 then -- Spawn Tab
         CreateButton("📦 Neon Box", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 local part = Instance.new("Part")
                 part.Name = "NeonBox"
@@ -766,12 +874,15 @@ function UpdateContent()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     part.Position = LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, 8, 5)
                 end
+                ShowNotification("✨ Spawned Neon Box", Colors.Green)
                 print("✨ Spawned: Neon Box")
             end)
         end, Colors.Green)
         CreateButton("💥 Spawn Explosion", function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 SpawnExplosion(LocalPlayer.Character.HumanoidRootPart.Position)
+            else
+                ShowNotification("❌ Explosion failed: No character!", Colors.Red)
             end
         end, Colors.Red)
         CreateButton("☁️ Cloud Explosion", function()
@@ -809,7 +920,7 @@ function UpdateContent()
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 CreateButton("🚀 TP to " .. player.Name, function()
-                    if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+                    if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
                     pcall(function()
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and
                            player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -819,14 +930,17 @@ function UpdateContent()
                                     obj:FireServer(LocalPlayer, player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0))
                                 end
                             end
+                            ShowNotification("🚀 Teleported to " .. player.Name, Colors.Green)
                             print("🚀 Teleported to: " .. player.Name)
+                        else
+                            ShowNotification("❌ Teleport failed: Invalid player!", Colors.Red)
                         end
                     end)
                 end, Colors.Primary)
             end
         end
         CreateButton("🌍 TP to Spawn", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10, 0)
@@ -835,12 +949,15 @@ function UpdateContent()
                             obj:FireServer(LocalPlayer, CFrame.new(0, 10, 0))
                         end
                     end
+                    ShowNotification("🌍 Teleported to Spawn", Colors.Green)
                     print("🌍 Teleported to Spawn")
+                else
+                    ShowNotification("❌ Teleport failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Green)
         CreateTextInput("Enter X,Y,Z (e.g. 100,50,200)", function(text)
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 local coords = {}
                 for num in text:gmatch("%-?%d+%.?%d*") do
@@ -853,8 +970,10 @@ function UpdateContent()
                             obj:FireServer(LocalPlayer, CFrame.new(coords[1], coords[2], coords[3]))
                         end
                     end
+                    ShowNotification("🚀 Teleported to " .. text, Colors.Green)
                     print("🚀 Teleported to: " .. text)
                 else
+                    ShowNotification("❌ Invalid coordinates! Use format X,Y,Z", Colors.Red)
                     print("❌ Invalid coordinates! Use format X,Y,Z")
                 end
             end)
@@ -862,40 +981,46 @@ function UpdateContent()
         
     elseif currentTab == 4 then -- Server Tab
         CreateButton("☀️ Day Time", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             Lighting.TimeOfDay = "12:00:00"
+            ShowNotification("☀️ Set to Day Time", Colors.Green)
             print("☀️ Set to Day Time")
         end, Colors.Orange)
         CreateButton("🌙 Night Time", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             Lighting.TimeOfDay = "00:00:00"
+            ShowNotification("🌙 Set to Night Time", Colors.Green)
             print("🌙 Set to Night Time")
         end, Colors.Purple)
         CreateButton("💡 Max Brightness", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             Lighting.Brightness = 3
+            ShowNotification("💡 Brightness set to max", Colors.Green)
             print("💡 Brightness set to max")
         end, Colors.Yellow)
         CreateButton("🌑 Dark Mode", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             Lighting.Brightness = 0
+            ShowNotification("🌑 Dark Mode enabled", Colors.Green)
             print("🌑 Dark Mode enabled")
         end, Colors.Gray)
         CreateButton("🌫️ Heavy Fog", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             Lighting.FogEnd = 50
+            ShowNotification("🌫️ Heavy Fog enabled", Colors.Green)
             print("🌫️ Heavy Fog enabled")
         end, Colors.Gray)
         CreateButton("🌤️ Clear Sky", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             Lighting.FogEnd = 100000
+            ShowNotification("🌤️ Clear Sky enabled", Colors.Green)
             print("🌤️ Clear Sky enabled")
         end, Colors.Cyan)
         CreateButton("🛑 Server Shutdown", ServerShutdown, Colors.Red)
         
     elseif currentTab == 5 then -- Fun Tab
         CreateButton("🎵 Play Music", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 local sound = Instance.new("Sound")
                 sound.SoundId = "rbxassetid://142376088"
@@ -903,63 +1028,78 @@ function UpdateContent()
                 sound.Looped = true
                 sound.Parent = workspace
                 sound:Play()
+                ShowNotification("🎵 Music playing", Colors.Green)
                 print("🎵 Music playing")
             end)
         end, Colors.Pink)
         CreateButton("🔊 Stop All Sounds", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             for _, obj in pairs(workspace:GetDescendants()) do
                 if obj:IsA("Sound") then
                     obj:Stop()
                     obj:Destroy()
                 end
             end
+            ShowNotification("🔊 All sounds stopped", Colors.Green)
             print("🔊 All sounds stopped")
         end, Colors.Gray)
         
     elseif currentTab == 6 then -- Utility Tab
         CreateButton("🔄 Rejoin Server", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
+            ShowNotification("🔄 Rejoining server...", Colors.Green)
         end, Colors.Orange)
         CreateButton("💀 Reset Character", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                     LocalPlayer.Character.Humanoid.Health = 0
+                    ShowNotification("💀 Character reset", Colors.Green)
                     print("💀 Character reset")
+                else
+                    ShowNotification("❌ Reset failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Red)
         CreateButton("⚡ Super Speed", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                     LocalPlayer.Character.Humanoid.WalkSpeed = 150
+                    ShowNotification("⚡ Super speed: 150", Colors.Green)
                     print("⚡ Super speed: 150")
+                else
+                    ShowNotification("❌ Speed failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Green)
         CreateButton("🐌 Normal Speed", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                     LocalPlayer.Character.Humanoid.WalkSpeed = 16
+                    ShowNotification("🐌 Normal speed: 16", Colors.Green)
                     print("🐌 Normal speed: 16")
+                else
+                    ShowNotification("❌ Speed failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Gray)
         CreateButton("🦘 Super Jump", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                     LocalPlayer.Character.Humanoid.JumpPower = 150
+                    ShowNotification("🦘 Super jump: 150", Colors.Green)
                     print("🦘 Super jump: 150")
+                else
+                    ShowNotification("❌ Jump failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Green)
         CreateButton("🚀 Fly Mode", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             local flying = false
             local speed = 50
             local bodyVelocity, bodyGyro
@@ -980,13 +1120,17 @@ function UpdateContent()
                         bodyGyro.CFrame = humanoidRootPart.CFrame
                         bodyGyro.Parent = humanoidRootPart
                         
+                        ShowNotification("🚀 Flying enabled!", Colors.Green)
                         print("🚀 Flying enabled!")
                     else
                         flying = false
                         if bodyVelocity then bodyVelocity:Destroy() end
                         if bodyGyro then bodyGyro:Destroy() end
+                        ShowNotification("🚀 Flying disabled!", Colors.Green)
                         print("🚀 Flying disabled!")
                     end
+                else
+                    ShowNotification("❌ Fly failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Cyan)
@@ -1000,7 +1144,7 @@ function UpdateContent()
             end
         end, FEBypass.Enabled and Colors.Green or Colors.Red)
         CreateButton("👻 Invisible Mode", function()
-            if not FEBypass.Enabled then print("❌ Enable FE Bypass first!") return end
+            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
             pcall(function()
                 if LocalPlayer.Character then
                     for _, part in pairs(LocalPlayer.Character:GetChildren()) do
@@ -1008,7 +1152,10 @@ function UpdateContent()
                             part.Transparency = part.Transparency == 0 and 1 or 0
                         end
                     end
+                    ShowNotification("👻 Invisibility toggled!", Colors.Green)
                     print("👻 Invisibility toggled!")
+                else
+                    ShowNotification("❌ Invisibility failed: No character!", Colors.Red)
                 end
             end)
         end, Colors.Purple)
@@ -1069,11 +1216,13 @@ SwitchBtn.MouseButton1Click:Connect(function()
         _G.Script1Gui.Visible = false
         SwitchBtn.Text = "🔄 Nyalakan Script 1"
         SwitchBtn.BackgroundColor3 = Colors.Green
+        ShowNotification("🔄 Script 1 disabled", Colors.Green)
     elseif _G.Script1Gui then
         _G.Script1Active = true
         _G.Script1Gui.Visible = true
         SwitchBtn.Text = "🔄 Matikan Script 1"
         SwitchBtn.BackgroundColor3 = Colors.Primary
+        ShowNotification("🔄 Script 1 enabled", Colors.Green)
     end
 end)
 
@@ -1161,8 +1310,9 @@ if _G.Script1Active and _G.Script1Gui then
 end
 
 -- Welcome message
+ShowNotification("🔥 FE Bypass Admin Panel loaded!", Colors.Green)
 print("🔥 FE Bypass Admin Panel loaded!")
 print("📱 Mobile optimized with full player visibility")
 print("🛡️ Enable FE Bypass for all features")
-print("👑 Enhanced admin access, explosions, and new features in all tabs")
+print("👑 Notifications for admin access and other actions")
 print("🎮 Use WASD/QE for fly controls when flying")
