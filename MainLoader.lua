@@ -1,3 +1,4 @@
+-- Client-side script (main.lua)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -10,6 +11,14 @@ local mouse = player:GetMouse()
 -- Unique identifier for this script instance
 local SCRIPT_ID = tostring(math.random(1, 1000000))
 local ACTIVE_SCRIPT_ID = SCRIPT_ID
+
+-- Create or find RemoteEvent for avatar copying
+local avatarRemote = ReplicatedStorage:FindFirstChild("CopyAvatarRemote")
+if not avatarRemote then
+    avatarRemote = Instance.new("RemoteEvent")
+    avatarRemote.Name = "CopyAvatarRemote"
+    avatarRemote.Parent = ReplicatedStorage
+end
 
 -- Fungsi untuk mengecek dan menonaktifkan instance sebelumnya
 local function disablePreviousInstance()
@@ -132,14 +141,21 @@ end
 local function copyAvatar(targetPlayer)
     if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
     local success, errorMsg = pcall(function()
-        if not targetPlayer.Character then return end
-        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if not targetPlayer.Character then
+            notify("⚠️ Target player has no character", Color3.fromRGB(255, 100, 100))
+            return
+        end
         local targetHumanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if not humanoid or not targetHumanoid then return end
+        if not targetHumanoid then
+            notify("⚠️ Target player has no humanoid", Color3.fromRGB(255, 100, 100))
+            return
+        end
 
+        -- Request server to apply description
         local description = targetHumanoid:GetAppliedDescription()
-        humanoid:ApplyDescription(description)
+        avatarRemote:FireServer(targetPlayer, description)
 
+        -- Copy accessories (client-side, as this is allowed)
         for _, accessory in pairs(player.Character:GetChildren()) do
             if accessory:IsA("Accessory") then
                 accessory:Destroy()
@@ -151,10 +167,10 @@ local function copyAvatar(targetPlayer)
                 newAccessory.Parent = player.Character
             end
         end
-        notify("👤 Copied avatar from " .. targetPlayer.Name, Color3.fromRGB(0, 255, 0))
+        notify("👤 Requested avatar copy from " .. targetPlayer.Name, Color3.fromRGB(0, 255, 0))
     end)
     if not success then
-        notify("⚠️ Failed to copy avatar: " .. tostring(errorMsg), Color3.fromRGB(255, 100, 100))
+        notify("⚠️ Failed to initiate avatar copy: " .. tostring(errorMsg), Color3.fromRGB(255, 100, 100))
     end
 end
 
