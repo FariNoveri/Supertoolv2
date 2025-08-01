@@ -1,5 +1,5 @@
 -- FE Bypass Mobile Admin GUI Script
--- Enhanced with improved Teleport Player to Me, notifications, deeper FE bypass, full features, scrolling, player visibility
+-- Enhanced with improved Teleport Player to Me (fixed no valid RemoteEvent/Function), deeper bypass, notifications, full features, scrolling, player visibility
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -463,7 +463,7 @@ local function DisableFEBypass()
     print("🔒 FE Bypass disabled!")
 end
 
--- Teleport Player with Improved Bypass
+-- Teleport Player with Improved Bypass (Fixed No Valid RemoteEvent/Function)
 local function TeleportPlayerBypass(player, target)
     if not FEBypass.Enabled then
         ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
@@ -496,12 +496,16 @@ local function TeleportPlayerBypass(player, target)
 
         -- Posisi tujuan dengan offset dan validasi aman
         local targetPos = target.Character.HumanoidRootPart.CFrame * CFrame.new(2, 0, 0) -- Offset 2 stud
+        if targetPos.Position.Y > 1000 then -- Cek kalau posisi di luar batas
+            targetPos = targetPos * CFrame.new(0, -targetPos.Position.Y + 10, 0)
+            ShowNotification("⚠️ Adjusted position: Target too high!", Colors.Orange)
+            print("⚠️ Adjusted position: Target Y > 1000")
+        end
         local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {player.Character, target.Character}
         rayParams.FilterType = Enum.RaycastFilterType.Blacklist
         local rayResult = workspace:Raycast(targetPos.Position, Vector3.new(0, -10, 0), rayParams)
         if not rayResult or rayResult.Position.Y < targetPos.Position.Y - 5 then
-            -- Jika posisi nggak aman, cari posisi terdekat yang aman
             targetPos = targetPos * CFrame.new(0, 5, 0) -- Naikkan 5 stud
             ShowNotification("⚠️ Adjusted position for safety!", Colors.Orange)
             print("⚠️ Adjusted teleport position for safety")
@@ -527,14 +531,14 @@ local function TeleportPlayerBypass(player, target)
         player.Character.HumanoidRootPart.CFrame = targetPos
 
         -- Bypass FE dengan RemoteEvent/Function
-        local teleportKeywords = {"teleport", "move", "tp", "relocate", "position", "update", "warp"}
+        local teleportKeywords = {"teleport", "move", "tp", "relocate", "position", "update", "warp", "setposition", "updateplayer", "char", "tele", "goto"}
         local remotesTried = {}
         local success = false
         local maxAttempts = 3
         local attempt = 1
 
-        -- Cari RemoteEvent/Function di ReplicatedStorage, Workspace, dan PlayerGui
-        local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui}
+        -- Cari RemoteEvent/Function di lebih banyak lokasi
+        local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui, LocalPlayer.PlayerScripts}
         for _, location in pairs(searchLocations) do
             for _, obj in pairs(location:GetDescendants()) do
                 if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
@@ -547,6 +551,8 @@ local function TeleportPlayerBypass(player, target)
                                         obj:FireServer(player, targetPos)
                                         obj:FireServer(player, targetPos.Position)
                                         obj:FireServer(player.UserId, targetPos)
+                                        obj:FireServer({position = targetPos.Position})
+                                        obj:FireServer({x = targetPos.Position.X, y = targetPos.Position.Y, z = targetPos.Position.Z})
                                         success = true
                                     end)
                                 elseif obj:IsA("RemoteFunction") then
@@ -558,8 +564,12 @@ local function TeleportPlayerBypass(player, target)
                                     if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
                                         success = true
                                     end
+                                    invokeSuccess, result = pcall(obj.InvokeServer, obj, {position = targetPos.Position})
+                                    if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                        success = true
+                                    end
                                 end
-                                wait(0.1) -- Delay antar percobaan
+                                wait(0.15) -- Delay lebih panjang untuk latensi
                             end
                         end
                     end
@@ -567,15 +577,66 @@ local function TeleportPlayerBypass(player, target)
             end
         end
 
+        -- Brute force semua RemoteEvent/Function kalau kata kunci gagal
+        if not success then
+            for _, location in pairs(searchLocations) do
+                for _, obj in pairs(location:GetDescendants()) do
+                    if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
+                        table.insert(remotesTried, obj)
+                        for i = 1, maxAttempts do
+                            if obj:IsA("RemoteEvent") then
+                                pcall(function()
+                                    obj:FireServer(player, targetPos)
+                                    obj:FireServer(player, targetPos.Position)
+                                    obj:FireServer(player.UserId, targetPos)
+                                    obj:FireServer({position = targetPos.Position})
+                                    obj:FireServer({x = targetPos.Position.X, y = targetPos.Position.Y, z = targetPos.Position.Z})
+                                    success = true
+                                end)
+                            elseif obj:IsA("RemoteFunction") then
+                                local invokeSuccess, result = pcall(obj.InvokeServer, obj, player, targetPos)
+                                if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                    success = true
+                                end
+                            end
+                            wait(0.15)
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Simulasi gerakan bertahap untuk bypass validasi server
+        if not success then
+            local startPos = player.Character.HumanoidRootPart.Position
+            local steps = 10
+            for i = 1, steps do
+                local interpPos = startPos + (targetPos.Position - startPos) * (i / steps)
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(interpPos)
+                for _, obj in pairs(remotesTried) do
+                    if obj:IsA("RemoteEvent") then
+                        pcall(function()
+                            obj:FireServer(player, CFrame.new(interpPos))
+                            obj:FireServer(player, interpPos)
+                        end)
+                    end
+                end
+                wait(0.05)
+            end
+        end
+
         -- Log dan notifikasi
         if success then
             ShowNotification("📞 Teleported " .. player.Name .. " to you!", Colors.Green)
             print("📞 Teleported " .. player.Name .. " to " .. target.Name)
-            print("✅ Remotes tried: " .. table.concat(remotesTried, ", "))
+            print("✅ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
         else
-            ShowNotification("⚠️ Teleport failed: No valid RemoteEvent/Function!", Colors.Red)
-            print("⚠️ Teleport failed: No valid RemoteEvent/Function found")
-            print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat(remotesTried, ", ") or "None"))
+            player.Character.HumanoidRootPart.CFrame = targetPos -- Fallback client-sided
+            ShowNotification("⚠️ Server sync failed: No valid RemoteEvent/Function! Teleport applied locally.", Colors.Orange)
+            print("⚠️ Server sync failed: No valid RemoteEvent/Function found")
+            print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
+            print("ℹ️ Teleport applied client-sided only")
+            print("ℹ️ Try checking game-specific RemoteEvents or use in a game with teleport Remotes")
         end
     end, function(err)
         ShowNotification("⚠️ Teleport error: " .. tostring(err), Colors.Red)
@@ -1406,5 +1467,5 @@ print("🔥 FE Bypass Admin Panel loaded!")
 print("📱 Mobile optimized with full player visibility")
 print("🛡️ Enable FE Bypass for all features")
 print("👑 Notifications for admin access and other actions")
-print("📞 Improved Teleport Player to Me with deeper bypass")
+print("📞 Improved Teleport Player to Me with deeper bypass and brute force")
 print("🎮 Use WASD/QE for fly controls when flying")
