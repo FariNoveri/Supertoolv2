@@ -1,5 +1,5 @@
 -- FE Bypass Mobile Admin GUI Script
--- Enhanced with notifications, deeper FE bypass, full features, scrolling, and player visibility
+-- Enhanced with improved Teleport Player to Me, notifications, deeper FE bypass, full features, scrolling, player visibility
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -463,7 +463,7 @@ local function DisableFEBypass()
     print("🔒 FE Bypass disabled!")
 end
 
--- Teleport Player with Deeper Bypass
+-- Teleport Player with Improved Bypass
 local function TeleportPlayerBypass(player, target)
     if not FEBypass.Enabled then
         ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
@@ -472,80 +472,114 @@ local function TeleportPlayerBypass(player, target)
     end
     
     pcall(function()
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and
-           target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            player.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                    obj:FireServer(player, target.Character.HumanoidRootPart.CFrame)
-                end
-            end
-            ShowNotification("🚀 Teleported " .. player.Name .. " to " .. target.Name, Colors.Green)
-            print("🚀 Bypass TP: " .. player.Name .. " to " .. target.Name)
-        else
+        -- Validasi pemain dan karakter
+        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
             ShowNotification("❌ Teleport failed: Invalid player!", Colors.Red)
+            print("❌ Teleport failed: Player " .. (player and player.Name or "nil") .. " has no valid character!")
+            return
         end
-    end)
-end
+        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
+            ShowNotification("❌ Teleport failed: Invalid target!", Colors.Red)
+            print("❌ Teleport failed: Target " .. (target and target.Name or "nil") .. " has no valid character!")
+            return
+        end
+        if player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health <= 0 then
+            ShowNotification("❌ Teleport failed: Player is dead!", Colors.Red)
+            print("❌ Teleport failed: Player " .. player.Name .. " is dead!")
+            return
+        end
+        if target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health <= 0 then
+            ShowNotification("❌ Teleport failed: Target is dead!", Colors.Red)
+            print("❌ Teleport failed: Target " .. target.Name .. " is dead!")
+            return
+        end
 
--- Ambil Akses Admin (Enhanced with Notification)
-local function GrantAdminAccess()
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    local adminSuccess = false
-    pcall(function()
-        local adminKeywords = {"admin", "mod", "cmd", "command", "privilege", "control", "access", "perm", "role", "owner"}
-        local payloads = {true, 1, "admin", "grant", "enable", LocalPlayer.Name, LocalPlayer.UserId, "owner", 999}
-        
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                for _, keyword in pairs(adminKeywords) do
-                    if string.find(string.lower(obj.Name), keyword) then
-                        if obj:IsA("RemoteEvent") then
-                            for _, payload in pairs(payloads) do
-                                obj:FireServer(payload)
-                                obj:FireServer(LocalPlayer, payload)
-                            end
-                        elseif obj:IsA("RemoteFunction") then
-                            for _, payload in pairs(payloads) do
-                                local success, result = pcall(obj.InvokeServer, obj, payload)
-                                if success and (result == true or type(result) == "table" or result == "success") then
-                                    adminSuccess = true
+        -- Posisi tujuan dengan offset dan validasi aman
+        local targetPos = target.Character.HumanoidRootPart.CFrame * CFrame.new(2, 0, 0) -- Offset 2 stud
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {player.Character, target.Character}
+        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+        local rayResult = workspace:Raycast(targetPos.Position, Vector3.new(0, -10, 0), rayParams)
+        if not rayResult or rayResult.Position.Y < targetPos.Position.Y - 5 then
+            -- Jika posisi nggak aman, cari posisi terdekat yang aman
+            targetPos = targetPos * CFrame.new(0, 5, 0) -- Naikkan 5 stud
+            ShowNotification("⚠️ Adjusted position for safety!", Colors.Orange)
+            print("⚠️ Adjusted teleport position for safety")
+        end
+
+        -- Efek visual teleportasi
+        local particle = Instance.new("ParticleEmitter")
+        particle.Texture = "rbxassetid://243098098"
+        particle.Size = NumberSequence.new(1, 0)
+        particle.Lifetime = NumberRange.new(0.5, 1)
+        particle.Rate = 50
+        particle.SpreadAngle = Vector2.new(360, 360)
+        particle.Parent = Instance.new("Part")
+        particle.Parent.Size = Vector3.new(0.2, 0.2, 0.2)
+        particle.Parent.Position = targetPos.Position
+        particle.Parent.Transparency = 1
+        particle.Parent.Anchored = true
+        particle.Parent.Parent = workspace
+        wait(1)
+        particle.Parent:Destroy()
+
+        -- Teleport client-sided
+        player.Character.HumanoidRootPart.CFrame = targetPos
+
+        -- Bypass FE dengan RemoteEvent/Function
+        local teleportKeywords = {"teleport", "move", "tp", "relocate", "position", "update", "warp"}
+        local remotesTried = {}
+        local success = false
+        local maxAttempts = 3
+        local attempt = 1
+
+        -- Cari RemoteEvent/Function di ReplicatedStorage, Workspace, dan PlayerGui
+        local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui}
+        for _, location in pairs(searchLocations) do
+            for _, obj in pairs(location:GetDescendants()) do
+                if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
+                    for _, keyword in pairs(teleportKeywords) do
+                        if string.find(string.lower(obj.Name), keyword) then
+                            table.insert(remotesTried, obj)
+                            for i = 1, maxAttempts do
+                                if obj:IsA("RemoteEvent") then
+                                    pcall(function()
+                                        obj:FireServer(player, targetPos)
+                                        obj:FireServer(player, targetPos.Position)
+                                        obj:FireServer(player.UserId, targetPos)
+                                        success = true
+                                    end)
+                                elseif obj:IsA("RemoteFunction") then
+                                    local invokeSuccess, result = pcall(obj.InvokeServer, obj, player, targetPos)
+                                    if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                        success = true
+                                    end
+                                    invokeSuccess, result = pcall(obj.InvokeServer, obj, player.UserId, targetPos.Position)
+                                    if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
+                                        success = true
+                                    end
                                 end
-                                success, result = pcall(obj.InvokeServer, obj, LocalPlayer, payload)
-                                if success and (result == true or type(result) == "table" or result == "success") then
-                                    adminSuccess = true
-                                end
+                                wait(0.1) -- Delay antar percobaan
                             end
                         end
                     end
                 end
             end
         end
-        
-        if LocalPlayer:FindFirstChild("PlayerGui") then
-            for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-                if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") and gui.Enabled then
-                    adminSuccess = true
-                end
-            end
-        end
-        
-        LocalPlayer:SetAttribute("IsAdmin", true)
-        LocalPlayer:SetAttribute("AdminLevel", 999)
-        LocalPlayer:SetAttribute("Role", "Admin")
-        
-        if adminSuccess or LocalPlayer:GetAttribute("IsAdmin") or LocalPlayer:GetAttribute("AdminLevel") == 999 then
-            ShowNotification("👑 Admin access granted!", Colors.Green)
-            print("👑 Admin access granted!")
+
+        -- Log dan notifikasi
+        if success then
+            ShowNotification("📞 Teleported " .. player.Name .. " to you!", Colors.Green)
+            print("📞 Teleported " .. player.Name .. " to " .. target.Name)
+            print("✅ Remotes tried: " .. table.concat(remotesTried, ", "))
         else
-            ShowNotification("⚠️ Admin access attempt failed!", Colors.Red)
-            print("⚠️ Admin access attempt failed! Check for admin privileges manually.")
+            ShowNotification("⚠️ Teleport failed: No valid RemoteEvent/Function!", Colors.Red)
+            print("⚠️ Teleport failed: No valid RemoteEvent/Function found")
+            print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat(remotesTried, ", ") or "None"))
         end
+    end, function(err)
+        ShowNotification("⚠️ Teleport error: " .. tostring(err), Colors.Red)
+        print("⚠️ Teleport error: " .. tostring(err))
     end)
 end
 
@@ -1159,7 +1193,65 @@ function UpdateContent()
                 end
             end)
         end, Colors.Purple)
-        CreateButton("👑 Grant Admin Access", GrantAdminAccess, Colors.Yellow)
+        CreateButton("👑 Grant Admin Access", function()
+            if not FEBypass.Enabled then
+                ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
+                print("❌ Enable FE Bypass first!")
+                return
+            end
+            
+            local adminSuccess = false
+            pcall(function()
+                local adminKeywords = {"admin", "mod", "cmd", "command", "privilege", "control", "access", "perm", "role", "owner"}
+                local payloads = {true, 1, "admin", "grant", "enable", LocalPlayer.Name, LocalPlayer.UserId, "owner", 999}
+                
+                for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+                    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                        for _, keyword in pairs(adminKeywords) do
+                            if string.find(string.lower(obj.Name), keyword) then
+                                if obj:IsA("RemoteEvent") then
+                                    for _, payload in pairs(payloads) do
+                                        obj:FireServer(payload)
+                                        obj:FireServer(LocalPlayer, payload)
+                                    end
+                                elseif obj:IsA("RemoteFunction") then
+                                    for _, payload in pairs(payloads) do
+                                        local success, result = pcall(obj.InvokeServer, obj, payload)
+                                        if success and (result == true or type(result) == "table" or result == "success") then
+                                            adminSuccess = true
+                                        end
+                                        success, result = pcall(obj.InvokeServer, obj, LocalPlayer, payload)
+                                        if success and (result == true or type(result) == "table" or result == "success") then
+                                            adminSuccess = true
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                if LocalPlayer:FindFirstChild("PlayerGui") then
+                    for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
+                        if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") and gui.Enabled then
+                            adminSuccess = true
+                        end
+                    end
+                end
+                
+                LocalPlayer:SetAttribute("IsAdmin", true)
+                LocalPlayer:SetAttribute("AdminLevel", 999)
+                LocalPlayer:SetAttribute("Role", "Admin")
+                
+                if adminSuccess or LocalPlayer:GetAttribute("IsAdmin") or LocalPlayer:GetAttribute("AdminLevel") == 999 then
+                    ShowNotification("👑 Admin access granted!", Colors.Green)
+                    print("👑 Admin access granted!")
+                else
+                    ShowNotification("⚠️ Admin access attempt failed!", Colors.Red)
+                    print("⚠️ Admin access attempt failed! Check for admin privileges manually.")
+                end
+            end)
+        end, Colors.Yellow)
         CreateTextInput("Enter Admin Command (e.g. :fly me)", function(text)
             RunAdminCommand(text)
         end)
@@ -1255,8 +1347,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") then
-            local humanoidRootPart = character.HumanoidRootPart
-            local bodyVelocity = humanoidRootPart:FindFirstChild("BodyVelocity")
+            local bodyVelocity = character.HumanoidRootPart:FindFirstChild("BodyVelocity")
             
             if bodyVelocity then
                 local camera = workspace.CurrentCamera
@@ -1315,4 +1406,5 @@ print("🔥 FE Bypass Admin Panel loaded!")
 print("📱 Mobile optimized with full player visibility")
 print("🛡️ Enable FE Bypass for all features")
 print("👑 Notifications for admin access and other actions")
+print("📞 Improved Teleport Player to Me with deeper bypass")
 print("🎮 Use WASD/QE for fly controls when flying")
