@@ -1,5 +1,5 @@
 -- FE Bypass Mobile Admin GUI Script
--- Optimized for scrolling, full player visibility, admin access, and new explosion features
+-- Enhanced with deeper FE bypass, scrolling, full player visibility, and explosion features
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -393,7 +393,7 @@ local function DisableFEBypass()
     print("🔒 FE Bypass disabled!")
 end
 
--- Teleport Player with Bypass
+-- Teleport Player with Deeper Bypass
 local function TeleportPlayerBypass(player, target)
     if not FEBypass.Enabled then
         print("❌ Enable FE Bypass first!")
@@ -403,13 +403,20 @@ local function TeleportPlayerBypass(player, target)
     pcall(function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and
            target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            -- Client-sided teleport
             player.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
+            -- Attempt server-sided teleport via RemoteEvent
+            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
+                    obj:FireServer(player, target.Character.HumanoidRootPart.CFrame)
+                end
+            end
             print("🚀 Bypass TP: " .. player.Name .. " to " .. target.Name)
         end
     end)
 end
 
--- Ambil Akses Admin
+-- Ambil Akses Admin (Enhanced)
 local function GrantAdminAccess()
     if not FEBypass.Enabled then
         print("❌ Enable FE Bypass first!")
@@ -417,18 +424,29 @@ local function GrantAdminAccess()
     end
     
     pcall(function()
+        local adminKeywords = {"admin", "mod", "cmd", "command", "privilege", "control", "access", "perm", "role"}
+        local payloads = {true, 1, "admin", "grant", LocalPlayer.Name, LocalPlayer.UserId}
+        
+        -- Cari dan coba semua RemoteEvent/Function yang relevan
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                if string.find(string.lower(obj.Name), "admin") or string.find(string.lower(obj.Name), "mod") then
-                    if obj:IsA("RemoteEvent") then
-                        obj:FireServer(LocalPlayer, true)
-                    elseif obj:IsA("RemoteFunction") then
-                        obj:InvokeServer(LocalPlayer, true)
+                for _, keyword in pairs(adminKeywords) do
+                    if string.find(string.lower(obj.Name), keyword) then
+                        if obj:IsA("RemoteEvent") then
+                            for _, payload in pairs(payloads) do
+                                obj:FireServer(payload)
+                            end
+                        elseif obj:IsA("RemoteFunction") then
+                            for _, payload in pairs(payloads) do
+                                obj:InvokeServer(payload)
+                            end
+                        end
                     end
                 end
             end
         end
         
+        -- Aktifkan GUI admin jika ada
         if LocalPlayer:FindFirstChild("PlayerGui") then
             for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
                 if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") then
@@ -437,12 +455,14 @@ local function GrantAdminAccess()
             end
         end
         
+        -- Set atribut admin
         LocalPlayer:SetAttribute("IsAdmin", true)
-        print("👑 Admin access attempted! Check if admin privileges are granted.")
+        LocalPlayer:SetAttribute("AdminLevel", 999)
+        print("👑 Admin access attempted with multiple payloads! Check if privileges are granted.")
     end)
 end
 
--- New Explosion Features
+-- Explosion Features with Server-Sided Attempt
 local function SpawnExplosion(position)
     if not FEBypass.Enabled then
         print("❌ Enable FE Bypass first!")
@@ -450,12 +470,20 @@ local function SpawnExplosion(position)
     end
     
     pcall(function()
+        -- Client-sided explosion
         local explosion = Instance.new("Explosion")
         explosion.Position = position
         explosion.BlastRadius = 20
         explosion.BlastPressure = 50000
         explosion.DestroyJointRadiusPercent = 0
         explosion.Parent = workspace
+        
+        -- Attempt server-sided explosion
+        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+            if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
+                obj:FireServer(position, 20, 50000)
+            end
+        end
         print("💥 Explosion spawned at: " .. tostring(position))
     end)
 end
@@ -469,12 +497,20 @@ local function SpawnCloudExplosion(player)
     pcall(function()
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 50, 0)
+            -- Client-sided explosion
             local explosion = Instance.new("Explosion")
             explosion.Position = position
             explosion.BlastRadius = 30
             explosion.BlastPressure = 30000
             explosion.DestroyJointRadiusPercent = 0
             explosion.Parent = workspace
+            
+            -- Attempt server-sided explosion
+            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
+                    obj:FireServer(position, 30, 30000)
+                end
+            end
             print("☁️ Cloud explosion spawned above: " .. player.Name)
         end
     end)
@@ -489,12 +525,20 @@ local function SpawnExplosionToPlayer(targetPlayer)
     pcall(function()
         if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local position = targetPlayer.Character.HumanoidRootPart.Position
+            -- Client-sided explosion
             local explosion = Instance.new("Explosion")
             explosion.Position = position
             explosion.BlastRadius = 15
             explosion.BlastPressure = 40000
             explosion.DestroyJointRadiusPercent = 0
             explosion.Parent = workspace
+            
+            -- Attempt server-sided explosion
+            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
+                    obj:FireServer(position, 15, 40000)
+                end
+            end
             print("💥 Explosion targeted at: " .. targetPlayer.Name)
         end
     end)
@@ -560,6 +604,12 @@ function UpdateContent()
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and
                            player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                             LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                            -- Attempt server-sided teleport
+                            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+                                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
+                                    obj:FireServer(LocalPlayer, player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0))
+                                end
+                            end
                             print("🚀 Teleported to: " .. player.Name)
                         end
                     end)
@@ -571,6 +621,11 @@ function UpdateContent()
             pcall(function()
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10, 0)
+                    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+                        if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
+                            obj:FireServer(LocalPlayer, CFrame.new(0, 10, 0))
+                        end
+                    end
                     print("🌍 Teleported to Spawn")
                 end
             end)
@@ -749,9 +804,7 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y拯救
-
-System: Y.Offset + delta.Y)
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
@@ -880,5 +933,5 @@ end
 print("🔥 FE Bypass Admin Panel loaded!")
 print("📱 Mobile optimized with full player visibility")
 print("🛡️ Enable FE Bypass for all features")
-print("👑 Admin access and explosion features in Bypass/Spawn tabs")
+print("👑 Enhanced admin access and server-sided attempts in Bypass/Spawn tabs")
 print("🎮 Use WASD/QE for fly controls when flying")
