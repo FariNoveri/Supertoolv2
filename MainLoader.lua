@@ -12,14 +12,6 @@ local mouse = player:GetMouse()
 local SCRIPT_ID = tostring(math.random(1, 1000000))
 local ACTIVE_SCRIPT_ID = SCRIPT_ID
 
--- Create or find RemoteEvent for avatar copying
-local avatarRemote = ReplicatedStorage:FindFirstChild("CopyAvatarRemote")
-if not avatarRemote then
-    avatarRemote = Instance.new("RemoteEvent")
-    avatarRemote.Name = "CopyAvatarRemote"
-    avatarRemote.Parent = ReplicatedStorage
-end
-
 -- Fungsi untuk mengecek dan menonaktifkan instance sebelumnya
 local function disablePreviousInstance()
     local success, errorMsg = pcall(function()
@@ -137,7 +129,7 @@ local function spawnServerSideObject(objectName, position)
     end
 end
 
--- Fungsi untuk copy avatar
+-- Fungsi untuk copy avatar (client-side only)
 local function copyAvatar(targetPlayer)
     if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
     local success, errorMsg = pcall(function()
@@ -145,32 +137,40 @@ local function copyAvatar(targetPlayer)
             notify("⚠️ Target player has no character", Color3.fromRGB(255, 100, 100))
             return
         end
-        local targetHumanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if not targetHumanoid then
-            notify("⚠️ Target player has no humanoid", Color3.fromRGB(255, 100, 100))
-            return
-        end
 
-        -- Request server to apply description
-        local description = targetHumanoid:GetAppliedDescription()
-        avatarRemote:FireServer(targetPlayer, description)
-
-        -- Copy accessories (client-side, as this is allowed)
+        -- Remove existing accessories
         for _, accessory in pairs(player.Character:GetChildren()) do
             if accessory:IsA("Accessory") then
                 accessory:Destroy()
             end
         end
+
+        -- Copy accessories from target player
         for _, accessory in pairs(targetPlayer.Character:GetChildren()) do
             if accessory:IsA("Accessory") then
                 local newAccessory = accessory:Clone()
                 newAccessory.Parent = player.Character
             end
         end
-        notify("👤 Requested avatar copy from " .. targetPlayer.Name, Color3.fromRGB(0, 255, 0))
+
+        -- Optional: Try to mimic body colors (client-side, may not work in all games)
+        local targetHumanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local playerHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if targetHumanoid and playerHumanoid then
+            for _, part in pairs(player.Character:GetChildren()) do
+                if part:IsA("BasePart") and not part:IsA("Accessory") then
+                    local targetPart = targetPlayer.Character:FindFirstChild(part.Name)
+                    if targetPart and targetPart:IsA("BasePart") then
+                        part.BrickColor = targetPart.BrickColor
+                    end
+                end
+            end
+        end
+
+        notify("👤 Copied accessories from " .. targetPlayer.Name .. " (client-side only)", Color3.fromRGB(0, 255, 0))
     end)
     if not success then
-        notify("⚠️ Failed to initiate avatar copy: " .. tostring(errorMsg), Color3.fromRGB(255, 100, 100))
+        notify("⚠️ Failed to copy avatar: " .. tostring(errorMsg), Color3.fromRGB(255, 100, 100))
     end
 end
 
@@ -360,7 +360,7 @@ local function createGUI()
         playerDropdownList.Parent = contentFrame
 
         local function updatePlayerList()
-            if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
+            if ACTIVE_SCRIPT_ID != SCRIPT_ID then return end
             playerDropdownList:ClearAllChildren()
             playerDropdownListLayout:Clone().Parent = playerDropdownList
             local players = Players:GetPlayers()
@@ -374,7 +374,7 @@ local function createGUI()
                 itemBtn.Font = Enum.Font.Gotham
                 itemBtn.Parent = playerDropdownList
                 itemBtn.MouseButton1Click:Connect(function()
-                    if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
+                    if ACTIVE_SCRIPT_ID != SCRIPT_ID then return end
                     playerDropdownLabel.Text = "Selected: " .. p.Name
                     playerDropdownList.Visible = false
                     playerDropdownBtn.Text = "▼"
@@ -384,7 +384,7 @@ local function createGUI()
         end
 
         playerDropdownBtn.MouseButton1Click:Connect(function()
-            if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
+            if ACTIVE_SCRIPT_ID != SCRIPT_ID then return end
             updatePlayerList()
             playerDropdownList.Visible = not playerDropdownList.Visible
             playerDropdownBtn.Text = playerDropdownList.Visible and "▲" or "▼"
@@ -401,7 +401,7 @@ local function createGUI()
             btn.Font = Enum.Font.Gotham
             btn.Parent = contentFrame
             btn.MouseButton1Click:Connect(function()
-                if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
+                if ACTIVE_SCRIPT_ID != SCRIPT_ID then return end
                 local success, errorMsg = pcall(callback)
                 if not success then
                     notify("⚠️ Button error: " .. tostring(errorMsg), Color3.fromRGB(255, 100, 100))
@@ -456,14 +456,14 @@ local function createGUI()
         end)
 
         minimizeBtn.MouseButton1Click:Connect(function()
-            if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
+            if ACTIVE_SCRIPT_ID != SCRIPT_ID then return end
             contentFrame.Visible = not contentFrame.Visible
             minimizeBtn.Text = contentFrame.Visible and "-" or "+"
             frame.Size = contentFrame.Visible and UDim2.new(0, 300, 0, 350) or UDim2.new(0, 300, 0, 30)
         end)
 
         closeBtn.MouseButton1Click:Connect(function()
-            if ACTIVE_SCRIPT_ID ~= SCRIPT_ID then return end
+            if ACTIVE_SCRIPT_ID != SCRIPT_ID then return end
             gui:Destroy()
             notify("🖼️ GUI Closed", Color3.fromRGB(0, 255, 0))
         end)
