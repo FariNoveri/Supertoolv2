@@ -1,5 +1,5 @@
 -- FE Bypass Mobile Admin GUI Script
--- Optimized for scrolling, full player visibility, and admin access feature
+-- Optimized for scrolling, full player visibility, admin access, and new explosion features
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -409,7 +409,7 @@ local function TeleportPlayerBypass(player, target)
     end)
 end
 
--- New Feature: Ambil Akses Admin
+-- Ambil Akses Admin
 local function GrantAdminAccess()
     if not FEBypass.Enabled then
         print("❌ Enable FE Bypass first!")
@@ -417,12 +417,11 @@ local function GrantAdminAccess()
     end
     
     pcall(function()
-        -- Cari RemoteEvent atau RemoteFunction yang terkait admin
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
                 if string.find(string.lower(obj.Name), "admin") or string.find(string.lower(obj.Name), "mod") then
                     if obj:IsA("RemoteEvent") then
-                        obj:FireServer(LocalPlayer, true) -- Coba aktifkan admin
+                        obj:FireServer(LocalPlayer, true)
                     elseif obj:IsA("RemoteFunction") then
                         obj:InvokeServer(LocalPlayer, true)
                     end
@@ -430,7 +429,6 @@ local function GrantAdminAccess()
             end
         end
         
-        -- Manipulasi properti Player jika ada
         if LocalPlayer:FindFirstChild("PlayerGui") then
             for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
                 if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") then
@@ -439,9 +437,66 @@ local function GrantAdminAccess()
             end
         end
         
-        -- Tambahan: Coba set properti admin jika ada
         LocalPlayer:SetAttribute("IsAdmin", true)
         print("👑 Admin access attempted! Check if admin privileges are granted.")
+    end)
+end
+
+-- New Explosion Features
+local function SpawnExplosion(position)
+    if not FEBypass.Enabled then
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        local explosion = Instance.new("Explosion")
+        explosion.Position = position
+        explosion.BlastRadius = 20
+        explosion.BlastPressure = 50000
+        explosion.DestroyJointRadiusPercent = 0
+        explosion.Parent = workspace
+        print("💥 Explosion spawned at: " .. tostring(position))
+    end)
+end
+
+local function SpawnCloudExplosion(player)
+    if not FEBypass.Enabled then
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 50, 0)
+            local explosion = Instance.new("Explosion")
+            explosion.Position = position
+            explosion.BlastRadius = 30
+            explosion.BlastPressure = 30000
+            explosion.DestroyJointRadiusPercent = 0
+            explosion.Parent = workspace
+            print("☁️ Cloud explosion spawned above: " .. player.Name)
+        end
+    end)
+end
+
+local function SpawnExplosionToPlayer(targetPlayer)
+    if not FEBypass.Enabled then
+        print("❌ Enable FE Bypass first!")
+        return
+    end
+    
+    pcall(function()
+        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local position = targetPlayer.Character.HumanoidRootPart.Position
+            local explosion = Instance.new("Explosion")
+            explosion.Position = position
+            explosion.BlastRadius = 15
+            explosion.BlastPressure = 40000
+            explosion.DestroyJointRadiusPercent = 0
+            explosion.Parent = workspace
+            print("💥 Explosion targeted at: " .. targetPlayer.Name)
+        end
     end)
 end
 
@@ -470,6 +525,21 @@ function UpdateContent()
                 print("✨ Spawned: Neon Box")
             end)
         end, Colors.Green)
+        CreateButton("💥 Spawn Explosion", function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                SpawnExplosion(LocalPlayer.Character.HumanoidRootPart.Position)
+            end
+        end, Colors.Red)
+        CreateButton("☁️ Cloud Explosion", function()
+            SpawnCloudExplosion(LocalPlayer)
+        end, Colors.Cyan)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                CreateButton("💥 Explosion to " .. player.Name, function()
+                    SpawnExplosionToPlayer(player)
+                end, Colors.Orange)
+            end
+        end
         
     elseif currentTab == 2 then -- Player Tab
         for _, player in pairs(Players:GetPlayers()) do
@@ -679,7 +749,9 @@ end)
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y拯救
+
+System: Y.Offset + delta.Y)
     end
 end)
 
@@ -734,7 +806,7 @@ end)
 spawn(function()
     while ScreenGui.Parent do
         wait(5)
-        if currentTab == 2 or currentTab == 3 then
+        if currentTab == 2 or currentTab == 3 or currentTab == 1 then
             UpdateContent()
         end
     end
@@ -808,5 +880,5 @@ end
 print("🔥 FE Bypass Admin Panel loaded!")
 print("📱 Mobile optimized with full player visibility")
 print("🛡️ Enable FE Bypass for all features")
-print("👑 New: Grant Admin Access in Bypass tab")
+print("👑 Admin access and explosion features in Bypass/Spawn tabs")
 print("🎮 Use WASD/QE for fly controls when flying")
