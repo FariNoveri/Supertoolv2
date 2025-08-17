@@ -1,4 +1,4 @@
--- Player.lua - Complete Player System Module by Fari Noveri
+-- Player.lua - Fixed version with better error handling
 
 local PlayerModule = {}
 
@@ -80,6 +80,68 @@ local function getPlayerDistance(targetPlayer)
     
     local distance = (player.Character.HumanoidRootPart.Position - targetPlayer.Character.HumanoidRootPart.Position).Magnitude
     return math.floor(distance)
+end
+
+local function getNextPlayer()
+    local playerList = Players:GetPlayers()
+    if #playerList <= 1 then return nil end
+    
+    local currentIndex = 1
+    
+    for i, p in ipairs(playerList) do
+        if p == selectedPlayer then
+            currentIndex = i
+            break
+        end
+    end
+    
+    local nextIndex = currentIndex + 1
+    if nextIndex > #playerList then
+        nextIndex = 1
+    end
+    
+    -- Skip self
+    local nextPlayer = playerList[nextIndex]
+    if nextPlayer == player then
+        nextIndex = nextIndex + 1
+        if nextIndex > #playerList then
+            nextIndex = 1
+        end
+        nextPlayer = playerList[nextIndex]
+    end
+    
+    return nextPlayer
+end
+
+local function getPreviousPlayer()
+    local playerList = Players:GetPlayers()
+    if #playerList <= 1 then return nil end
+    
+    local currentIndex = 1
+    
+    for i, p in ipairs(playerList) do
+        if p == selectedPlayer then
+            currentIndex = i
+            break
+        end
+    end
+    
+    local prevIndex = currentIndex - 1
+    if prevIndex < 1 then
+        prevIndex = #playerList
+    end
+    
+    -- Skip self
+    local prevPlayer = playerList[prevIndex]
+    if prevPlayer == player then
+        prevIndex = prevIndex - 1
+        if prevIndex < 1 then
+            prevIndex = #playerList
+        end
+        prevPlayer = playerList[prevIndex]
+    end
+    
+    return prevPlayer
 end
 
 -- Magnet Player Functions
@@ -496,65 +558,20 @@ local function resetCameraMode()
     playerSettings.CameraMode.currentMode = "Default"
     print("Reset to Default Camera Mode")
 end
-    local playerList = Players:GetPlayers()
-    local currentIndex = 1
-    
-    for i, p in ipairs(playerList) do
-        if p == selectedPlayer then
-            currentIndex = i
-            break
-        end
-    end
-    
-    local nextIndex = currentIndex + 1
-    if nextIndex > #playerList then
-        nextIndex = 1
-    end
-    
-    -- Skip self
-    local nextPlayer = playerList[nextIndex]
-    if nextPlayer == player then
-        nextIndex = nextIndex + 1
-        if nextIndex > #playerList then
-            nextIndex = 1
-        end
-        nextPlayer = playerList[nextIndex]
-    end
-    
-    return nextPlayer
-end
-
-local function getPreviousPlayer()
-    local playerList = Players:GetPlayers()
-    local currentIndex = 1
-    
-    for i, p in ipairs(playerList) do
-        if p == selectedPlayer then
-            currentIndex = i
-            break
-        end
-    end
-    
-    local prevIndex = currentIndex - 1
-    if prevIndex < 1 then
-        prevIndex = #playerList
-    end
-    
-    -- Skip self
-    local prevPlayer = playerList[prevIndex]
-    if prevPlayer == player then
-        prevIndex = prevIndex - 1
-        if prevIndex < 1 then
-            prevIndex = #playerList
-        end
-        prevPlayer = playerList[prevIndex]
-    end
-    
-    return prevPlayer
-end
 
 -- Module Functions
 function PlayerModule.init(dependencies)
+    -- Validate dependencies
+    if not dependencies then
+        warn("PlayerModule.init: No dependencies provided")
+        return false
+    end
+    
+    if not dependencies.player then
+        warn("PlayerModule.init: Player dependency missing")
+        return false
+    end
+    
     player = dependencies.player
     character = dependencies.character
     humanoid = dependencies.humanoid
@@ -579,7 +596,7 @@ function PlayerModule.init(dependencies)
     -- Start health ESP updater
     updateHealthESP()
     
-    print("Player module initialized")
+    print("Player module initialized successfully")
     return true
 end
 
@@ -588,20 +605,68 @@ function PlayerModule.getSelectedPlayer()
 end
 
 function PlayerModule.loadPlayerButtons(createButton, createToggleButton, currentSelectedPlayer)
+    -- Validate button creation functions
+    if not createButton or type(createButton) ~= "function" then
+        warn("PlayerModule.loadPlayerButtons: Invalid createButton function")
+        return false
+    end
+    
+    if not createToggleButton or type(createToggleButton) ~= "function" then
+        warn("PlayerModule.loadPlayerButtons: Invalid createToggleButton function")
+        return false
+    end
+    
     selectedPlayer = currentSelectedPlayer or selectedPlayer
     
+    -- Wrap button creation in pcall for error handling
+    local function safeCreateButton(name, callback)
+        local success, result = pcall(function()
+            return createButton(name, callback)
+        end)
+        
+        if not success then
+            warn("Failed to create button '" .. name .. "': " .. tostring(result))
+            return nil
+        end
+        
+        return result
+    end
+    
+    local function safeCreateToggleButton(name, onCallback, offCallback)
+        local success, result = pcall(function()
+            return createToggleButton(name, onCallback, offCallback)
+        end)
+        
+        if not success then
+            warn("Failed to create toggle button '" .. name .. "': " .. tostring(result))
+            return nil
+        end
+        
+        return result
+    end
+    
     -- Player Selection
-    createButton("Next Player", function()
-        selectedPlayer = getNextPlayer()
-        print("Selected Player: " .. (selectedPlayer and selectedPlayer.Name or "None"))
+    safeCreateButton("Next Player", function()
+        local nextPlayer = getNextPlayer()
+        if nextPlayer then
+            selectedPlayer = nextPlayer
+            print("Selected Player: " .. selectedPlayer.Name)
+        else
+            print("No other players available")
+        end
     end)
     
-    createButton("Previous Player", function()
-        selectedPlayer = getPreviousPlayer()
-        print("Selected Player: " .. (selectedPlayer and selectedPlayer.Name or "None"))
+    safeCreateButton("Previous Player", function()
+        local prevPlayer = getPreviousPlayer()
+        if prevPlayer then
+            selectedPlayer = prevPlayer
+            print("Selected Player: " .. selectedPlayer.Name)
+        else
+            print("No other players available")
+        end
     end)
     
-    createButton("Show Selected", function()
+    safeCreateButton("Show Selected", function()
         if selectedPlayer then
             print("Currently Selected: " .. selectedPlayer.Name)
         else
@@ -610,7 +675,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     end)
     
     -- Magnet Player
-    createToggleButton("Magnet Player", function(enabled)
+    safeCreateToggleButton("Magnet Player", function(enabled)
         playerSettings.MagnetPlayer.enabled = enabled
         if enabled then
             enableMagnetPlayer()
@@ -622,38 +687,38 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     end)
     
     -- ESP Features
-    createToggleButton("ESP Highlight", function(enabled)
+    safeCreateToggleButton("ESP Highlight", function(enabled)
         playerSettings.ESP.enabled = enabled
         updateESP()
     end, nil)
     
-    createToggleButton("ESP Health", function(enabled)
+    safeCreateToggleButton("ESP Health", function(enabled)
         playerSettings.ESPHealth.enabled = enabled
         updateESP()
     end, nil)
     
-    createToggleButton("ESP Names", function(enabled)
+    safeCreateToggleButton("ESP Names", function(enabled)
         playerSettings.NameESP.enabled = enabled
         updateESP()
     end, nil)
     
-    createToggleButton("ESP Distance", function(enabled)
+    safeCreateToggleButton("ESP Distance", function(enabled)
         playerSettings.DistanceESP.enabled = enabled
         updateESP()
     end, nil)
     
-    createToggleButton("ESP Box", function(enabled)
+    safeCreateToggleButton("ESP Box", function(enabled)
         playerSettings.BoxESP.enabled = enabled
         updateESP()
     end, nil)
     
-    createToggleButton("Chams", function(enabled)
+    safeCreateToggleButton("Chams", function(enabled)
         playerSettings.Chams.enabled = enabled
         updateESP()
     end, nil)
     
     -- ESP Settings
-    createButton("ESP Color", function()
+    safeCreateButton("ESP Color", function()
         currentColorIndex = currentColorIndex + 1
         if currentColorIndex > #espColors then
             currentColorIndex = 1
@@ -668,7 +733,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         updateESP()
     end)
     
-    createButton("Team Ignore Toggle", function()
+    safeCreateButton("Team Ignore Toggle", function()
         playerSettings.ESP.ignoreTeam = not playerSettings.ESP.ignoreTeam
         playerSettings.ESPHealth.ignoreTeam = playerSettings.ESP.ignoreTeam
         playerSettings.NameESP.ignoreTeam = playerSettings.ESP.ignoreTeam
@@ -681,7 +746,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     end)
     
     -- Player Actions
-    createButton("Teleport to Player", function()
+    safeCreateButton("Teleport to Player", function()
         if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                 player.Character.HumanoidRootPart.CFrame = selectedPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
@@ -692,7 +757,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         end
     end)
     
-    createToggleButton("Spectate Player", function(enabled)
+    safeCreateToggleButton("Spectate Player", function(enabled)
         playerSettings.SpectatePlayer.enabled = enabled
         if enabled then
             enableSpectate()
@@ -704,44 +769,45 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     end)
     
     -- Camera Mode Controls
-    createButton("Switch to FPP", function()
+    safeCreateButton("Switch to FPP", function()
         switchToFPP()
     end)
     
-    createButton("Switch to TPP", function()
+    safeCreateButton("Switch to TPP", function()
         switchToTPP()
     end)
     
-    createButton("Reset Camera", function()
+    safeCreateButton("Reset Camera", function()
         resetCameraMode()
     end)
     
-    createButton("Show Camera Mode", function()
+    safeCreateButton("Show Camera Mode", function()
         print("Current Camera Mode: " .. playerSettings.CameraMode.currentMode)
     end)
     
     -- Magnet Settings
-    createButton("Magnet Distance +", function()
+    safeCreateButton("Magnet Distance +", function()
         playerSettings.MagnetPlayer.distance = playerSettings.MagnetPlayer.distance + 10
         print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance)
     end)
     
-    createButton("Magnet Distance -", function()
+    safeCreateButton("Magnet Distance -", function()
         playerSettings.MagnetPlayer.distance = math.max(playerSettings.MagnetPlayer.distance - 10, 10)
         print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance)
     end)
     
-    createButton("Magnet Speed +", function()
+    safeCreateButton("Magnet Speed +", function()
         playerSettings.MagnetPlayer.speed = math.min(playerSettings.MagnetPlayer.speed + 0.05, 1)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
     
-    createButton("Magnet Speed -", function()
+    safeCreateButton("Magnet Speed -", function()
         playerSettings.MagnetPlayer.speed = math.max(playerSettings.MagnetPlayer.speed - 0.05, 0.01)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
     
     print("Player buttons loaded successfully")
+    return true
 end
 
 function PlayerModule.resetStates()
@@ -785,7 +851,64 @@ function PlayerModule.resetStates()
     disableSpectate()
     resetCameraMode()
     
-    print("Player module states reset")
+    print("Player module states reset successfully")
+    return true
+end
+
+-- Debug function to help troubleshoot issues
+function PlayerModule.getDebugInfo()
+    local debugInfo = {
+        selectedPlayer = selectedPlayer and selectedPlayer.Name or "None",
+        playerCount = #Players:GetPlayers(),
+        espObjectsCount = {},
+        activeConnections = {
+            magnet = magnetConnection ~= nil,
+            spectate = spectateConnection ~= nil,
+            camera = cameraConnection ~= nil
+        },
+        settings = {
+            magnetEnabled = playerSettings.MagnetPlayer.enabled,
+            espEnabled = playerSettings.ESP.enabled,
+            spectateEnabled = playerSettings.SpectatePlayer.enabled
+        }
+    }
+    
+    -- Count ESP objects
+    for espType, espList in pairs(espObjects) do
+        debugInfo.espObjectsCount[espType] = #espList
+    end
+    
+    return debugInfo
+end
+
+-- Function to validate the module state
+function PlayerModule.validateState()
+    local issues = {}
+    
+    if not player then
+        table.insert(issues, "Player reference is nil")
+    end
+    
+    if not Players:FindFirstChild(player.Name) then
+        table.insert(issues, "Player not found in Players service")
+    end
+    
+    if selectedPlayer and not Players:FindFirstChild(selectedPlayer.Name) then
+        table.insert(issues, "Selected player no longer exists")
+        selectedPlayer = nil
+    end
+    
+    -- Check for orphaned connections
+    local activeConnections = 0
+    if magnetConnection then activeConnections = activeConnections + 1 end
+    if spectateConnection then activeConnections = activeConnections + 1 end
+    if cameraConnection then activeConnections = activeConnections + 1 end
+    
+    if activeConnections > 0 then
+        print("Active connections: " .. activeConnections)
+    end
+    
+    return issues
 end
 
 return PlayerModule
