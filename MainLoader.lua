@@ -1,17 +1,232 @@
--- [Previous script content unchanged until moduleURLs]
+-- Main entry point for MinimalHackGUI by Fari Noveri
+
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+-- Local Player
+local player = Players.LocalPlayer
+local character, humanoid, rootPart
+
+-- Connections and states
+local connections = {}
+local buttonStates = {}
+local selectedCategory = "Movement"
+local categoryStates = {} -- Store feature states per category
+local activeFeature = nil -- Track currently active exclusive feature
+local exclusiveFeatures = {} -- List of features that should be exclusive
+
+-- Settings
+local settings = {
+    FlySpeed = {value = 50, min = 10, max = 200, default = 50},
+    FreecamSpeed = {value = 50, min = 10, max = 200, default = 50},
+    JumpHeight = {value = 7.2, min = 0, max = 50, default = 7.2},
+    WalkSpeed = {value = 16, min = 10, max = 200, default = 16}
+}
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MinimalHackGUI"
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Enabled = true
+
+-- Check for existing script instances
+for _, gui in pairs(player.PlayerGui:GetChildren()) do
+    if gui:IsA("ScreenGui") and gui.Name == "MinimalHackGUI" and gui ~= ScreenGui then
+        gui:Destroy()
+    end
+end
+
+-- Main Frame
+local Frame = Instance.new("Frame")
+Frame.Name = "MainFrame"
+Frame.Parent = ScreenGui
+Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Frame.BorderColor3 = Color3.fromRGB(45, 45, 45)
+Frame.BorderSizePixel = 1
+Frame.Position = UDim2.new(0.5, -250, 0.5, -150)
+Frame.Size = UDim2.new(0, 500, 0, 300)
+Frame.Active = true
+Frame.Draggable = true
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Parent = Frame
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.BorderSizePixel = 0
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.Font = Enum.Font.Gotham
+Title.Text = "MinimalHackGUI by Fari Noveri [Backup]"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 10
+
+-- Minimized Logo
+local MinimizedLogo = Instance.new("Frame")
+MinimizedLogo.Name = "MinimizedLogo"
+MinimizedLogo.Parent = ScreenGui
+MinimizedLogo.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MinimizedLogo.BorderColor3 = Color3.fromRGB(45, 45, 45)
+MinimizedLogo.Position = UDim2.new(0, 5, 0, 5)
+MinimizedLogo.Size = UDim2.new(0, 30, 0, 30)
+MinimizedLogo.Visible = false
+MinimizedLogo.Active = true
+MinimizedLogo.Draggable = true
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 12)
+Corner.Parent = MinimizedLogo
+
+local LogoText = Instance.new("TextLabel")
+LogoText.Parent = MinimizedLogo
+LogoText.BackgroundTransparency = 1
+LogoText.Size = UDim2.new(1, 0, 1, 0)
+LogoText.Font = Enum.Font.GothamBold
+LogoText.Text = "H"
+LogoText.TextColor3 = Color3.fromRGB(255, 255, 255)
+LogoText.TextSize = 12
+LogoText.TextStrokeTransparency = 0.5
+LogoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+local LogoButton = Instance.new("TextButton")
+LogoButton.Parent = MinimizedLogo
+LogoButton.BackgroundTransparency = 1
+LogoButton.Size = UDim2.new(1, 0, 1, 0)
+LogoButton.Text = ""
+
+-- Minimize Button
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Parent = Frame
+MinimizeButton.BackgroundTransparency = 1
+MinimizeButton.Position = UDim2.new(1, -20, 0, 5) -- Adjusted position since CloseButton is removed
+MinimizeButton.Size = UDim2.new(0, 20, 0, 20)
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.Text = "-"
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.TextSize = 10
+
+-- Category Container with Scrolling
+local CategoryContainer = Instance.new("ScrollingFrame")
+CategoryContainer.Parent = Frame
+CategoryContainer.BackgroundTransparency = 1
+CategoryContainer.Position = UDim2.new(0, 5, 0, 30)
+CategoryContainer.Size = UDim2.new(0, 80, 1, -35)
+CategoryContainer.ScrollBarThickness = 4
+CategoryContainer.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
+CategoryContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+CategoryContainer.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+CategoryContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+
+local CategoryLayout = Instance.new("UIListLayout")
+CategoryLayout.Parent = CategoryContainer
+CategoryLayout.Padding = UDim.new(0, 3)
+CategoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CategoryLayout.FillDirection = Enum.FillDirection.Vertical
+
+-- Update category canvas size when content changes
+CategoryLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    CategoryContainer.CanvasSize = UDim2.new(0, 0, 0, CategoryLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- Feature Container
+local FeatureContainer = Instance.new("ScrollingFrame")
+FeatureContainer.Parent = Frame
+FeatureContainer.BackgroundTransparency = 1
+FeatureContainer.Position = UDim2.new(0, 90, 0, 30)
+FeatureContainer.Size = UDim2.new(1, -95, 1, -35)
+FeatureContainer.ScrollBarThickness = 4
+FeatureContainer.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
+FeatureContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+FeatureContainer.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+FeatureContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+FeatureContainer.Visible = true
+
+local FeatureLayout = Instance.new("UIListLayout")
+FeatureLayout.Parent = FeatureContainer
+FeatureLayout.Padding = UDim.new(0, 2)
+FeatureLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Update feature canvas size when content changes
+FeatureLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    FeatureContainer.CanvasSize = UDim2.new(0, 0, 0, FeatureLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- Categories
+local categories = {
+    {name = "Movement", order = 1},
+    {name = "Player", order = 2},
+    {name = "Aim", order = 3},
+    {name = "Visual", order = 4},
+    {name = "Utility", order = 5},
+    {name = "Settings", order = 6},
+    {name = "Info", order = 7}
+}
+
+local categoryFrames = {}
+local isMinimized = false
+
+-- Define exclusive features (features that can't run together)
+exclusiveFeatures = {
+    "Fly", "Noclip", "Speed", "JumpHeight", "InfiniteJump", 
+    "Freecam", "FullBright", "ESP", "Tracers", "AutoFarm"
+}
+
+-- Function to disable active feature
+local function disableActiveFeature()
+    if activeFeature then
+        local categoryName = activeFeature.category
+        local featureName = activeFeature.name
+        
+        -- Set state to false
+        if categoryStates[categoryName] and categoryStates[categoryName][featureName] ~= nil then
+            categoryStates[categoryName][featureName] = false
+        end
+        
+        -- Find and update button appearance
+        for _, child in pairs(FeatureContainer:GetChildren()) do
+            if child:IsA("TextButton") and child.Name == featureName then
+                child.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                break
+            end
+        end
+        
+        -- Call disable callback if available
+        if activeFeature.disableCallback then
+            pcall(activeFeature.disableCallback)
+        end
+        
+        print("Disabled active feature: " .. featureName)
+        activeFeature = nil
+    end
+end
+
+-- Function to check if feature is exclusive
+local function isExclusiveFeature(featureName)
+    for _, exclusive in pairs(exclusiveFeatures) do
+        if string.find(featureName, exclusive) then
+            return true
+        end
+    end
+    return false
+end
 
 -- Load modules
 local modules = {}
 local modulesLoaded = {}
 
 local moduleURLs = {
-    Movement = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Movement.lua",
-    Player = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Player.lua",
-    Aim = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Aim.lua",
-    Visual = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Visual.lua",
-    Brutal = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Brutal.lua",
-    Settings = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Settings.lua",
-    Info = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/Info.lua"
+    Movement = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Movement.lua",
+    Player = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Player.lua",
+    Aim = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Aim.lua",
+    Visual = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Visual.lua",
+    Utility = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Utility.lua",
+    Settings = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Settings.lua",
+    Info = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Info.lua"
 }
 
 local function loadModule(moduleName)
@@ -109,14 +324,19 @@ local function createButton(name, callback, categoryName)
     
     if type(callback) == "function" then
         button.MouseButton1Click:Connect(function()
+            -- Check if this is an exclusive feature
             if isExclusiveFeature(name) then
+                -- Disable currently active feature if any
                 disableActiveFeature()
+                
+                -- Set this as the new active feature
                 activeFeature = {
                     name = name,
                     category = categoryName,
-                    disableCallback = nil
+                    disableCallback = nil -- Regular buttons don't have disable callbacks
                 }
             end
+            
             callback()
         end)
     end
@@ -131,7 +351,7 @@ local function createButton(name, callback, categoryName)
     print("Created button: " .. name .. " for category: " .. categoryName)
 end
 
--- Create toggle button
+-- Create toggle button with exclusive feature support
 local function createToggleButton(name, callback, categoryName, disableCallback)
     local button = Instance.new("TextButton")
     button.Name = name
@@ -153,14 +373,19 @@ local function createToggleButton(name, callback, categoryName, disableCallback)
     button.MouseButton1Click:Connect(function()
         local newState = not categoryStates[categoryName][name]
         
+        -- If enabling an exclusive feature
         if newState and isExclusiveFeature(name) then
+            -- Disable currently active feature if any
             disableActiveFeature()
+            
+            -- Set this as the new active feature
             activeFeature = {
                 name = name,
                 category = categoryName,
                 disableCallback = disableCallback
             }
         elseif not newState and activeFeature and activeFeature.name == name then
+            -- If disabling the current active feature
             activeFeature = nil
         end
         
@@ -184,12 +409,14 @@ end
 
 -- Load buttons implementation
 local function loadButtons()
+    -- Clear existing buttons
     for _, child in pairs(FeatureContainer:GetChildren()) do
         if child:IsA("TextButton") or child:IsA("TextLabel") then
             child:Destroy()
         end
     end
     
+    -- Update category button backgrounds
     for categoryName, categoryData in pairs(categoryFrames) do
         categoryData.button.BackgroundColor3 = categoryName == selectedCategory and Color3.fromRGB(50, 50, 50) or Color3.fromRGB(25, 25, 25)
     end
@@ -199,6 +426,7 @@ local function loadButtons()
         return
     end
     
+    -- Show loading label
     local loadingLabel = Instance.new("TextLabel")
     loadingLabel.Parent = FeatureContainer
     loadingLabel.BackgroundTransparency = 1
@@ -210,11 +438,13 @@ local function loadButtons()
     loadingLabel.TextXAlignment = Enum.TextXAlignment.Left
 
     task.spawn(function()
+        -- Small delay to ensure UI updates
         task.wait(0.2)
         
         local success = false
         local errorMessage = nil
 
+        -- Load buttons based on selected category
         if selectedCategory == "Movement" and modules.Movement and type(modules.Movement.loadMovementButtons) == "function" then
             success, errorMessage = pcall(function()
                 print("Loading Movement buttons...")
@@ -236,11 +466,13 @@ local function loadButtons()
         elseif selectedCategory == "Aim" and modules.Aim and type(modules.Aim.loadAimButtons) == "function" then
             success, errorMessage = pcall(function()
                 local selectedPlayer = modules.Player and modules.Player.getSelectedPlayer and modules.Player.getSelectedPlayer() or nil
+                local freecamEnabled = modules.Visual and modules.Visual.getFreecamState and modules.Visual.getFreecamState() or false
+                local freecamPosition = modules.Visual and modules.Visual.getFreecamState and select(2, modules.Visual.getFreecamState()) or nil
+                local toggleFreecam = modules.Visual and modules.Visual.toggleFreecam or function() end
                 print("Loading Aim buttons with selectedPlayer: " .. tostring(selectedPlayer))
                 modules.Aim.loadAimButtons(
                     function(name, callback) createButton(name, callback, "Aim") end,
-                    function(name, callback, disableCallback) createToggleButton(name, callback, "Aim", disableCallback) end,
-                    selectedPlayer
+                    selectedPlayer, freecamEnabled, freecamPosition, toggleFreecam
                 )
             end)
         elseif selectedCategory == "Visual" and modules.Visual and type(modules.Visual.loadVisualButtons) == "function" then
@@ -250,13 +482,12 @@ local function loadButtons()
                     createToggleButton(name, callback, "Visual", disableCallback)
                 end)
             end)
-        elseif selectedCategory == "Brutal" and modules.Brutal and type(modules.Brutal.loadBrutalButtons) == "function" then
+        elseif selectedCategory == "Utility" and modules.Utility and type(modules.Utility.loadUtilityButtons) == "function" then
             success, errorMessage = pcall(function()
-                print("Loading Brutal buttons...")
-                modules.Brutal.loadBrutalButtons(
-                    function(name, callback) createButton(name, callback, "Brutal") end,
-                    function(name, callback, disableCallback) createToggleButton(name, callback, "Brutal", disableCallback) end
-                )
+                print("Loading Utility buttons...")
+                modules.Utility.loadUtilityButtons(function(name, callback)
+                    createButton(name, callback, "Utility")
+                end)
             end)
         elseif selectedCategory == "Settings" and modules.Settings and type(modules.Settings.loadSettingsButtons) == "function" then
             success, errorMessage = pcall(function()
@@ -277,6 +508,7 @@ local function loadButtons()
             warn(errorMessage)
         end
 
+        -- Update UI based on result
         if loadingLabel and loadingLabel.Parent then
             if not success or errorMessage then
                 loadingLabel.Text = "Failed to load " .. selectedCategory .. " buttons: " .. tostring(errorMessage)
@@ -400,12 +632,12 @@ task.spawn(function()
     local startTime = tick()
     
     -- Wait for critical modules to load
-    while (not modules.Movement or not modules.Player or not modules.Teleport) and tick() - startTime < timeout do
+    while (not modules.Movement or not modules.Player or not modules.Aim) and tick() - startTime < timeout do
         task.wait(0.1)
     end
 
     -- Check if modules loaded successfully
-    for _, moduleName in ipairs({"Movement", "Player", "Teleport"}) do
+    for _, moduleName in ipairs({"Movement", "Player", "Aim"}) do
         if not modules[moduleName] then
             warn("Failed to load " .. moduleName .. " module after timeout!")
         else
