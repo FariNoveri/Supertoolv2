@@ -220,13 +220,13 @@ local modules = {}
 local modulesLoaded = {}
 
 local moduleURLs = {
-    Movement = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Movement.lua",
-    Player = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Player.lua",
-    Aim = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Aim.lua",
-    Visual = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Visual.lua",
-    Utility = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Utility.lua",
-    Settings = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Settings.lua",
-    Info = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Backup/Info.lua"
+    Movement = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Movement.lua",
+    Player = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Player.lua",
+    Aim = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Aim.lua",
+    Visual = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Visual.lua",
+    Utility = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Utility.lua",
+    Settings = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Settings.lua",
+    Info = "https://raw.githubusercontent.com/FariNoveri/Supertoolv2/main/Info.lua"
 }
 
 local function loadModule(moduleName)
