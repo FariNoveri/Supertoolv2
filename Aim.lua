@@ -1,41 +1,32 @@
 -- Aim module loader for MinimalHackGUI
 
--- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
--- Local variables
 local player = Players.LocalPlayer
 local selectedPlayer = nil
 local modules = {}
 local connections = {}
 
--- Feature URLs
 local featureURLs = {
-    Aimbot = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/aim/Aimbot.lua",
-    AimBullet = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/aim/AimBullet.lua",
-    SilentAim = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/aim/SilentAim.lua",
-    AutoKill = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/aim/AutoKill.lua",
-    TriggerBot = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/aim/TriggerBot.lua"
+    Aimbot = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/aim/Aimbot.lua"
 }
 
--- Load feature module
 local function loadFeature(featureName)
     if not featureURLs[featureName] then
-        warn("No URL defined for feature: " .. featureName)
+        warn("No URL defined for feature: " .. featureName .. " URL: " .. tostring(featureURLs[featureName]))
         return false
     end
-    
     local success, result = pcall(function()
-        local response = game:HttpGet(featureURLs[featureName])
+        local response = game:HttpGet(featureURLs[featureName], true, 10)
         if not response or response == "" then
-            warn("Empty or invalid response for feature: " .. featureName)
+            warn("Empty response for feature: " .. featureName .. " URL: " .. featureURLs[featureName])
             return nil
         end
-        local func = loadstring(response)
+        local func, compileError = loadstring(response)
         if not func then
-            warn("Failed to compile feature: " .. featureName)
+            warn("Failed to compile feature: " .. featureName .. " Error: " .. tostring(compileError))
             return nil
         end
         local module = func()
@@ -45,7 +36,6 @@ local function loadFeature(featureName)
         end
         return module
     end)
-    
     if success and result then
         modules[featureName] = result
         print("Loaded feature: " .. featureName)
@@ -56,17 +46,13 @@ local function loadFeature(featureName)
     end
 end
 
--- Initialize module
 local function init(deps)
     player = deps.player or player
     connections = deps.connections or connections
-    
-    -- Load all feature modules
     for featureName, _ in pairs(featureURLs) do
         task.spawn(function() loadFeature(featureName) end)
     end
-    
-    -- Initialize feature modules
+    task.wait(0.1)
     for featureName, module in pairs(modules) do
         if module and type(module.init) == "function" then
             local success, result = pcall(function()
@@ -85,15 +71,12 @@ local function init(deps)
             end
         end
     end
-    
-    -- Player selection logic
     connections.playerAdded = Players.PlayerAdded:Connect(function(newPlayer)
         if not selectedPlayer then
             selectedPlayer = newPlayer
             print("Selected player: " .. newPlayer.Name)
         end
     end)
-    
     connections.playerRemoving = Players.PlayerRemoving:Connect(function(leavingPlayer)
         if selectedPlayer == leavingPlayer then
             selectedPlayer = nil
@@ -108,16 +91,12 @@ local function init(deps)
     end)
 end
 
--- Get selected player
 local function getSelectedPlayer()
     return selectedPlayer
 end
 
--- Load aim buttons
 local function loadAimButtons(createButton, createToggleButton, currentSelectedPlayer)
     selectedPlayer = currentSelectedPlayer or selectedPlayer
-    
-    -- Create button to select a player
     createButton("Select Target", function()
         local players = Players:GetPlayers()
         local index = selectedPlayer and table.find(players, selectedPlayer) or 1
@@ -125,8 +104,6 @@ local function loadAimButtons(createButton, createToggleButton, currentSelectedP
         selectedPlayer = players[index]
         print("Selected target: " .. (selectedPlayer and selectedPlayer.Name or "None"))
     end, "Aim")
-    
-    -- Load feature buttons
     for featureName, module in pairs(modules) do
         if module and type(module.enable) == "function" then
             local disableCallback = type(module.disable) == "function" and module.disable or nil
@@ -144,11 +121,12 @@ local function loadAimButtons(createButton, createToggleButton, currentSelectedP
                     warn("Error toggling feature " .. featureName .. ": " .. tostring(result))
                 end
             end, "Aim", disableCallback)
+        else
+            warn("Feature " .. featureName .. " missing enable function")
         end
     end
 end
 
--- Reset states
 local function resetStates()
     for featureName, module in pairs(modules) do
         if module and type(module.disable) == "function" then

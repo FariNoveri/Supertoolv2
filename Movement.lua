@@ -1,41 +1,32 @@
 -- Movement module loader for MinimalHackGUI
 
--- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
--- Local variables
 local player = Players.LocalPlayer
 local character, humanoid, rootPart
 local modules = {}
 local connections = {}
 
--- Feature URLs
 local featureURLs = {
-    Fly = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/movement/Fly.lua",
-    Noclip = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/movement/Noclip.lua",
-    Speed = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/movement/Speed.lua",
-    JumpHeight = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/movement/JumpHeight.lua",
-    InfiniteJump = "https://raw.githubusercontent.com/FariNoveri/SupertoolV2/main/Backup/movement/InfiniteJump.lua"
+    Fly = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/movement/Fly.lua"
 }
 
--- Load feature module
 local function loadFeature(featureName)
     if not featureURLs[featureName] then
-        warn("No URL defined for feature: " .. featureName)
+        warn("No URL defined for feature: " .. featureName .. " URL: " .. tostring(featureURLs[featureName]))
         return false
     end
-    
     local success, result = pcall(function()
-        local response = game:HttpGet(featureURLs[featureName])
+        local response = game:HttpGet(featureURLs[featureName], true, 10)
         if not response or response == "" then
-            warn("Empty or invalid response for feature: " .. featureName)
+            warn("Empty response for feature: " .. featureName .. " URL: " .. featureURLs[featureName])
             return nil
         end
-        local func = loadstring(response)
+        local func, compileError = loadstring(response)
         if not func then
-            warn("Failed to compile feature: " .. featureName)
+            warn("Failed to compile feature: " .. featureName .. " Error: " .. tostring(compileError))
             return nil
         end
         local module = func()
@@ -45,7 +36,6 @@ local function loadFeature(featureName)
         end
         return module
     end)
-    
     if success and result then
         modules[featureName] = result
         print("Loaded feature: " .. featureName)
@@ -56,20 +46,16 @@ local function loadFeature(featureName)
     end
 end
 
--- Initialize module
 local function init(deps)
     player = deps.player or player
     character = deps.character
     humanoid = deps.humanoid
     rootPart = deps.rootPart
     connections = deps.connections or connections
-    
-    -- Load all feature modules
     for featureName, _ in pairs(featureURLs) do
         task.spawn(function() loadFeature(featureName) end)
     end
-    
-    -- Initialize feature modules
+    task.wait(0.1)
     for featureName, module in pairs(modules) do
         if module and type(module.init) == "function" then
             local success, result = pcall(function()
@@ -91,7 +77,6 @@ local function init(deps)
     end
 end
 
--- Load movement buttons
 local function loadMovementButtons(createButton, createToggleButton)
     for featureName, module in pairs(modules) do
         if module and type(module.enable) == "function" then
@@ -110,11 +95,12 @@ local function loadMovementButtons(createButton, createToggleButton)
                     warn("Error toggling feature " .. featureName .. ": " .. tostring(result))
                 end
             end, "Movement", disableCallback)
+        else
+            warn("Feature " .. featureName .. " missing enable function")
         end
     end
 end
 
--- Reset states
 local function resetStates()
     for featureName, module in pairs(modules) do
         if module and type(module.disable) == "function" then

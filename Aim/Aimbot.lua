@@ -2,20 +2,22 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local player, selectedPlayer
 local aimConnection
 local isAiming = false
 
 local function init(deps)
-    player = deps.player
+    player = deps.player or Players.LocalPlayer
     selectedPlayer = deps.selectedPlayer
 end
 
 local function enable(target)
     selectedPlayer = target or selectedPlayer
-    if not selectedPlayer or not player.Character or not selectedPlayer.Character then return end
+    if not selectedPlayer or not player.Character or not selectedPlayer.Character then
+        warn("Aimbot: Missing player or character")
+        return
+    end
     isAiming = true
     aimConnection = RunService.RenderStepped:Connect(function()
         local targetPart = selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head")
