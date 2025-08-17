@@ -11,7 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 -- Variables
-local player = Players.LocalPlayer -- Fixed: Initialize player
+local player = Players.LocalPlayer
 local character, humanoid, rootPart
 local connections = {}
 local settings
@@ -40,6 +40,7 @@ local reloadConnection = nil
 local shootConnection = nil
 local ammoConnection = nil
 local originalRaycast = nil
+local hookedRemotes = {}
 
 -- Utility Functions
 local function getClosestPlayer()
@@ -77,7 +78,11 @@ local function getClosestPlayer()
             
             -- Visibility check
             if aimSettings.Aimbot.visibleOnly then
-                local raycast = Workspace:Raycast(playerPos, (targetPos - playerPos).Unit * distance)
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                raycastParams.FilterDescendantsInstances = {player.Character}
+                
+                local raycast = workspace:Raycast(playerPos, (targetPos - playerPos).Unit * distance, raycastParams)
                 if raycast and raycast.Instance and not raycast.Instance:IsDescendantOf(otherPlayer.Character) then
                     continue
                 end
@@ -107,7 +112,7 @@ local function getTargetPosition(target)
     
     -- Prediction for moving targets
     if aimSettings.AimBullet.enabled and target.Character:FindFirstChild("HumanoidRootPart") then
-        local targetVelocity = target.Character.HumanoidRootPart.AssemblyLinearVelocity
+        local targetVelocity = target.Character.HumanoidRootPart.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
         if targetVelocity.Magnitude > 1 then
             local distance = (player.Character.HumanoidRootPart.Position - targetPos).Magnitude
             local timeToHit = distance / aimSettings.AimBullet.velocity
@@ -118,31 +123,31 @@ local function getTargetPosition(target)
     return targetPos
 end
 
--- Fixed: Store original raycast properly
+-- Fixed WallShoot function
 local function enableWallShoot()
+    -- Hook workspace:Raycast method properly
     if not originalRaycast then
-        originalRaycast = Workspace.Raycast
-    end
-    
-    -- Override raycast to ignore walls
-    Workspace.Raycast = function(self, origin, direction, raycastParams)
-        if aimSettings.WallShoot.enabled then
-            -- Create new raycast params if none provided
-            if not raycastParams then
-                raycastParams = RaycastParams.new()
-            end
-            
-            -- Modify raycast to only hit players
-            raycastParams.FilterType = Enum.RaycastFilterType.Whitelist
-            local playerChars = {}
-            for _, p in pairs(Players:GetPlayers()) do
-                if p.Character and p ~= player then
-                    table.insert(playerChars, p.Character)
+        originalRaycast = workspace.Raycast
+        
+        workspace.Raycast = function(self, origin, direction, raycastParams)
+            if aimSettings.WallShoot.enabled then
+                -- Create new raycast params if none provided
+                if not raycastParams then
+                    raycastParams = RaycastParams.new()
                 end
+                
+                -- Modify raycast to only hit players
+                raycastParams.FilterType = Enum.RaycastFilterType.Whitelist
+                local playerChars = {}
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p.Character and p ~= player then
+                        table.insert(playerChars, p.Character)
+                    end
+                end
+                raycastParams.FilterDescendantsInstances = playerChars
             end
-            raycastParams.FilterDescendantsInstances = playerChars
+            return originalRaycast(self, origin, direction, raycastParams)
         end
-        return originalRaycast(self, origin, direction, raycastParams)
     end
     
     print("WallShoot enabled")
@@ -150,8 +155,9 @@ end
 
 local function disableWallShoot()
     if originalRaycast then
-        Workspace.Raycast = originalRaycast
-        print("WallShoot disabled - Original raycast restored")
+        workspace.Raycast = originalRaycast
+        originalRaycast = nil
+        print("WallShoot disabled")
     end
 end
 
@@ -160,7 +166,7 @@ local function enableAimbot()
     if aimConnection then aimConnection:Disconnect() end
     
     aimConnection = RunService.Heartbeat:Connect(function()
-        if not aimSettings.Aimbot.enabled then return end -- Added check
+        if not aimSettings.Aimbot.enabled then return end
         if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
         
         currentTarget = getClosestPlayer()
@@ -170,6 +176,8 @@ local function enableAimbot()
         if not targetPos then return end
         
         local camera = Workspace.CurrentCamera
+        if not camera then return end
+        
         local currentCFrame = camera.CFrame
         local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPos)
         
@@ -190,53 +198,77 @@ local function disableAimbot()
     print("Aimbot disabled")
 end
 
--- Fixed: Better RemoteEvent detection and hooking
+-- Fixed RemoteEvent hooking
 local function enableAimBullet()
-    if shootConnection then shootConnection:Disconnect() end
-    
-    local function hookRemoteEvent()
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") then
-                local name = string.lower(obj.Name)
-                if string.find(name, "shoot") or string.find(name, "fire") or string.find(name, "bullet") then
-                    local originalFireServer = obj.FireServer
-                    
-                    obj.FireServer = function(self, ...)
-                        local args = {...}
-                        local target = getClosestPlayer()
-                        
-                        if target and aimSettings.AimBullet.enabled then
-                            local targetPos = getTargetPosition(target)
-                            if targetPos then
-                                -- Try to modify different argument positions
-                                if #args >= 1 and typeof(args[1]) == "Vector3" then
-                                    args[1] = targetPos
-                                elseif #args >= 2 and typeof(args[2]) == "Vector3" then
-                                    args[2] = targetPos
-                                end
+    local function hookRemoteEvent(remoteEvent)
+        if hookedRemotes[remoteEvent] then return end -- Prevent double hooking
+        
+        local mt = getrawmetatable(remoteEvent)
+        if not mt then return end
+        
+        local oldNamecall = mt.__namecall
+        setreadonly(mt, false)
+        
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+            
+            if self == remoteEvent and method == "FireServer" and aimSettings.AimBullet.enabled then
+                local target = getClosestPlayer()
+                if target then
+                    local targetPos = getTargetPosition(target)
+                    if targetPos then
+                        -- Modify arguments based on common patterns
+                        for i = 1, #args do
+                            if typeof(args[i]) == "Vector3" then
+                                args[i] = targetPos
+                                break
+                            elseif typeof(args[i]) == "table" and args[i].Position then
+                                args[i].Position = targetPos
+                                break
+                            elseif typeof(args[i]) == "CFrame" then
+                                args[i] = CFrame.new(args[i].Position, targetPos)
+                                break
                             end
                         end
-                        
-                        return originalFireServer(self, unpack(args))
                     end
-                    print("Hooked RemoteEvent: " .. obj.Name)
                 end
+            end
+            
+            return oldNamecall(self, unpack(args))
+        end)
+        
+        setreadonly(mt, true)
+        hookedRemotes[remoteEvent] = true
+        print("Hooked RemoteEvent: " .. remoteEvent.Name)
+    end
+    
+    -- Hook existing RemoteEvents
+    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            local name = string.lower(obj.Name)
+            if string.find(name, "shoot") or string.find(name, "fire") or 
+               string.find(name, "bullet") or string.find(name, "weapon") or
+               string.find(name, "gun") then
+                hookRemoteEvent(obj)
             end
         end
     end
     
-    -- Also hook new RemoteEvents that might be created
+    -- Hook new RemoteEvents
+    if shootConnection then shootConnection:Disconnect() end
     shootConnection = ReplicatedStorage.DescendantAdded:Connect(function(obj)
         if obj:IsA("RemoteEvent") then
+            wait(0.1)
             local name = string.lower(obj.Name)
-            if string.find(name, "shoot") or string.find(name, "fire") or string.find(name, "bullet") then
-                wait(0.1) -- Small delay to ensure the event is fully loaded
-                hookRemoteEvent()
+            if string.find(name, "shoot") or string.find(name, "fire") or 
+               string.find(name, "bullet") or string.find(name, "weapon") or
+               string.find(name, "gun") then
+                hookRemoteEvent(obj)
             end
         end
     end)
     
-    hookRemoteEvent()
     print("AimBullet enabled")
 end
 
@@ -245,37 +277,45 @@ local function disableAimBullet()
         shootConnection:Disconnect()
         shootConnection = nil
     end
+    hookedRemotes = {}
     print("AimBullet disabled")
 end
 
--- Fixed: Better reload detection
+-- Fixed Fast Reload
 local function enableFastReload()
     if reloadConnection then reloadConnection:Disconnect() end
     
     reloadConnection = RunService.Heartbeat:Connect(function()
         if not aimSettings.FastReload.enabled then return end
         
-        if player.Character then
-            -- Speed up reload animations
-            for _, obj in pairs(player.Character:GetDescendants()) do
-                if obj:IsA("AnimationTrack") then
-                    local name = string.lower(obj.Animation.AnimationId)
-                    if string.find(name, "reload") then
-                        obj:AdjustSpeed(aimSettings.FastReload.speed)
+        pcall(function()
+            -- Speed up animations
+            if player.Character then
+                for _, obj in pairs(player.Character:GetDescendants()) do
+                    if obj:IsA("AnimationTrack") then
+                        local animId = obj.Animation.AnimationId:lower()
+                        if animId:find("reload") then
+                            obj:AdjustSpeed(aimSettings.FastReload.speed)
+                        end
                     end
                 end
             end
             
-            -- Also check for NumberValues related to reload time
-            for _, obj in pairs(player.Character:GetDescendants()) do
-                if obj:IsA("NumberValue") then
-                    local name = string.lower(obj.Name)
-                    if string.find(name, "reload") and obj.Value > 0 then
-                        obj.Value = obj.Value / aimSettings.FastReload.speed
+            -- Speed up reload values in tools
+            if player.Character then
+                local tool = player.Character:FindFirstChildOfClass("Tool")
+                if tool then
+                    for _, obj in pairs(tool:GetDescendants()) do
+                        if obj:IsA("NumberValue") then
+                            local name = obj.Name:lower()
+                            if name:find("reload") and obj.Value > 0 then
+                                obj.Value = math.max(obj.Value / aimSettings.FastReload.speed, 0.1)
+                            end
+                        end
                     end
                 end
             end
-        end
+        end)
     end)
     
     print("Fast Reload enabled")
@@ -289,26 +329,31 @@ local function disableFastReload()
     print("Fast Reload disabled")
 end
 
--- Fixed: Better recoil detection
+-- Fixed No Recoil
 local function enableNoRecoil()
-    if player.Character then
-        for _, obj in pairs(player.Character:GetDescendants()) do
-            if obj:IsA("NumberValue") then
-                local name = string.lower(obj.Name)
-                if string.find(name, "recoil") or string.find(name, "kick") or string.find(name, "sway") then
-                    if not originalRecoil[obj] then -- Prevent overwriting
-                        originalRecoil[obj] = obj.Value
+    pcall(function()
+        if player.Character then
+            local tool = player.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                for _, obj in pairs(tool:GetDescendants()) do
+                    if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                        local name = obj.Name:lower()
+                        if name:find("recoil") or name:find("kick") or name:find("sway") then
+                            if not originalRecoil[obj] then
+                                originalRecoil[obj] = obj.Value
+                            end
+                            obj.Value = 0
+                        end
                     end
-                    obj.Value = 0
                 end
             end
         end
         
-        -- Also check in ReplicatedStorage or other locations
+        -- Check ReplicatedStorage
         for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("NumberValue") then
-                local name = string.lower(obj.Name)
-                if string.find(name, "recoil") and obj.Parent.Name == player.Name then
+            if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                local name = obj.Name:lower()
+                if name:find("recoil") or name:find("kick") then
                     if not originalRecoil[obj] then
                         originalRecoil[obj] = obj.Value
                     end
@@ -316,76 +361,73 @@ local function enableNoRecoil()
                 end
             end
         end
-    end
+    end)
     print("No Recoil enabled")
 end
 
 local function disableNoRecoil()
     for obj, originalValue in pairs(originalRecoil) do
-        if obj and obj.Parent then
-            obj.Value = originalValue
-        end
+        pcall(function()
+            if obj and obj.Parent then
+                obj.Value = originalValue
+            end
+        end)
     end
     originalRecoil = {}
     print("No Recoil disabled")
 end
 
--- Fixed: Better spread detection
+-- Fixed No Spread
 local function enableNoSpread()
-    if player.Character then
-        for _, obj in pairs(player.Character:GetDescendants()) do
-            if obj:IsA("NumberValue") then
-                local name = string.lower(obj.Name)
-                if string.find(name, "spread") or string.find(name, "accuracy") then
-                    if not originalSpread[obj] then
-                        originalSpread[obj] = obj.Value
+    pcall(function()
+        if player.Character then
+            local tool = player.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                for _, obj in pairs(tool:GetDescendants()) do
+                    if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                        local name = obj.Name:lower()
+                        if name:find("spread") or name:find("accuracy") then
+                            if not originalSpread[obj] then
+                                originalSpread[obj] = obj.Value
+                            end
+                            obj.Value = 0
+                        end
                     end
-                    obj.Value = 0
                 end
             end
         end
-    end
+    end)
     print("No Spread enabled")
 end
 
 local function disableNoSpread()
     for obj, originalValue in pairs(originalSpread) do
-        if obj and obj.Parent then
-            obj.Value = originalValue
-        end
+        pcall(function()
+            if obj and obj.Parent then
+                obj.Value = originalValue
+            end
+        end)
     end
     originalSpread = {}
     print("No Spread disabled")
 end
 
--- Fixed: Better infinite ammo implementation
+-- Fixed Infinite Ammo
 local function enableInfiniteAmmo()
     if ammoConnection then ammoConnection:Disconnect() end
     
     ammoConnection = RunService.Heartbeat:Connect(function()
         if not aimSettings.InfiniteAmmo.enabled then return end
         
-        if player.Character then
-            for _, obj in pairs(player.Character:GetDescendants()) do
-                if obj:IsA("IntValue") or obj:IsA("NumberValue") then
-                    local name = string.lower(obj.Name)
-                    if string.find(name, "ammo") or string.find(name, "bullet") or string.find(name, "mag") then
-                        if obj.Value < 999 then
-                            obj.Value = 999
-                        end
-                    end
-                end
-            end
-        end
-        
-        -- Also check player's backpack/tools
-        if player.Backpack then
-            for _, tool in pairs(player.Backpack:GetChildren()) do
-                if tool:IsA("Tool") then
+        pcall(function()
+            -- Check equipped tool
+            if player.Character then
+                local tool = player.Character:FindFirstChildOfClass("Tool")
+                if tool then
                     for _, obj in pairs(tool:GetDescendants()) do
                         if obj:IsA("IntValue") or obj:IsA("NumberValue") then
-                            local name = string.lower(obj.Name)
-                            if string.find(name, "ammo") or string.find(name, "bullet") then
+                            local name = obj.Name:lower()
+                            if name:find("ammo") or name:find("bullet") or name:find("mag") then
                                 if obj.Value < 999 then
                                     obj.Value = 999
                                 end
@@ -394,7 +436,25 @@ local function enableInfiniteAmmo()
                     end
                 end
             end
-        end
+            
+            -- Check backpack tools
+            if player.Backpack then
+                for _, tool in pairs(player.Backpack:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        for _, obj in pairs(tool:GetDescendants()) do
+                            if obj:IsA("IntValue") or obj:IsA("NumberValue") then
+                                local name = obj.Name:lower()
+                                if name:find("ammo") or name:find("bullet") then
+                                    if obj.Value < 999 then
+                                        obj.Value = 999
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
     end)
     
     print("Infinite Ammo enabled")
@@ -408,38 +468,28 @@ local function disableInfiniteAmmo()
     print("Infinite Ammo disabled")
 end
 
--- Fixed: Better rapid fire implementation
+-- Fixed Rapid Fire
 local function enableRapidFire()
-    if player.Character then
-        for _, obj in pairs(player.Character:GetDescendants()) do
-            if obj:IsA("NumberValue") then
-                local name = string.lower(obj.Name)
-                if string.find(name, "firerate") or string.find(name, "cooldown") or string.find(name, "delay") then
-                    obj.Value = aimSettings.RapidFire.rate
+    pcall(function()
+        if player.Character then
+            local tool = player.Character:FindFirstChildOfClass("Tool")
+            if tool then
+                for _, obj in pairs(tool:GetDescendants()) do
+                    if obj:IsA("NumberValue") then
+                        local name = obj.Name:lower()
+                        if name:find("firerate") or name:find("cooldown") or name:find("delay") then
+                            obj.Value = aimSettings.RapidFire.rate
+                        end
+                    end
                 end
             end
         end
-    end
-    
-    -- Also check equipped tools
-    if player.Character and player.Character:FindFirstChildOfClass("Tool") then
-        local tool = player.Character:FindFirstChildOfClass("Tool")
-        for _, obj in pairs(tool:GetDescendants()) do
-            if obj:IsA("NumberValue") then
-                local name = string.lower(obj.Name)
-                if string.find(name, "firerate") or string.find(name, "cooldown") then
-                    obj.Value = aimSettings.RapidFire.rate
-                end
-            end
-        end
-    end
-    
+    end)
     print("Rapid Fire enabled")
 end
 
 -- Module Functions
 function AimModule.init(dependencies)
-    -- Use LocalPlayer if dependencies don't provide player
     player = dependencies and dependencies.player or Players.LocalPlayer
     character = dependencies and dependencies.character
     humanoid = dependencies and dependencies.humanoid
@@ -469,6 +519,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableWallShoot()
         end
+        return aimSettings.WallShoot.enabled -- Return state for button color
     end)
     
     -- Aimbot Toggle
@@ -481,6 +532,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableAimbot()
         end
+        return aimSettings.Aimbot.enabled
     end)
     
     -- AimBullet Toggle
@@ -493,6 +545,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableAimBullet()
         end
+        return aimSettings.AimBullet.enabled
     end)
     
     -- Fast Reload Toggle
@@ -505,6 +558,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableFastReload()
         end
+        return aimSettings.FastReload.enabled
     end)
     
     -- No Recoil Toggle
@@ -517,6 +571,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableNoRecoil()
         end
+        return aimSettings.NoRecoil.enabled
     end)
     
     -- No Spread Toggle
@@ -529,6 +584,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableNoSpread()
         end
+        return aimSettings.NoSpread.enabled
     end)
     
     -- Infinite Ammo Toggle
@@ -541,6 +597,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             disableInfiniteAmmo()
         end
+        return aimSettings.InfiniteAmmo.enabled
     end)
     
     -- Rapid Fire Toggle
@@ -551,6 +608,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         if aimSettings.RapidFire.enabled then
             enableRapidFire()
         end
+        return aimSettings.RapidFire.enabled
     end)
     
     -- Headshot Only Toggle
@@ -563,6 +621,7 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         else
             aimSettings.Aimbot.targetPart = "HumanoidRootPart"
         end
+        return aimSettings.HeadshotOnly.enabled
     end)
     
     -- Silent Aim Toggle
@@ -577,38 +636,45 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
             aimSettings.AimBullet.enabled = false
             disableAimBullet()
         end
+        return aimSettings.SilentAim.enabled
     end)
     
     -- Settings Buttons
     createButton("Aimbot FOV +", function()
         aimSettings.Aimbot.fov = math.min(aimSettings.Aimbot.fov + 10, 180)
         print("Aimbot FOV: " .. aimSettings.Aimbot.fov)
+        return false -- Settings buttons don't change color
     end)
     
     createButton("Aimbot FOV -", function()
         aimSettings.Aimbot.fov = math.max(aimSettings.Aimbot.fov - 10, 10)
         print("Aimbot FOV: " .. aimSettings.Aimbot.fov)
+        return false
     end)
     
     createButton("Smoothness +", function()
         aimSettings.Aimbot.smoothness = math.min(aimSettings.Aimbot.smoothness + 0.05, 1)
-        print("Aimbot Smoothness: " .. aimSettings.Aimbot.smoothness)
+        print("Aimbot Smoothness: " .. string.format("%.2f", aimSettings.Aimbot.smoothness))
+        return false
     end)
     
     createButton("Smoothness -", function()
         aimSettings.Aimbot.smoothness = math.max(aimSettings.Aimbot.smoothness - 0.05, 0.01)
-        print("Aimbot Smoothness: " .. aimSettings.Aimbot.smoothness)
+        print("Aimbot Smoothness: " .. string.format("%.2f", aimSettings.Aimbot.smoothness))
+        return false
     end)
     
     createButton("Toggle Team Ignore", function()
         aimSettings.Aimbot.ignoreTeam = not aimSettings.Aimbot.ignoreTeam
         aimSettings.AimBullet.ignoreTeam = aimSettings.Aimbot.ignoreTeam
         print("Ignore Team: " .. tostring(aimSettings.Aimbot.ignoreTeam))
+        return aimSettings.Aimbot.ignoreTeam
     end)
     
     createButton("Toggle Visible Only", function()
         aimSettings.Aimbot.visibleOnly = not aimSettings.Aimbot.visibleOnly
         print("Visible Only: " .. tostring(aimSettings.Aimbot.visibleOnly))
+        return aimSettings.Aimbot.visibleOnly
     end)
     
     print("Aim buttons loaded successfully")
@@ -654,6 +720,7 @@ function AimModule.resetStates()
     disableInfiniteAmmo()
     
     currentTarget = nil
+    hookedRemotes = {}
     print("Aim module states reset successfully")
 end
 
