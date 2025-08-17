@@ -1,1623 +1,650 @@
+-- Main entry point for MinimalHackGUI by Fari Noveri
+
+-- Services
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
+local Lighting = game:GetService("Lighting")
 
--- Global untuk Script 1
-_G.Script1Active = _G.Script1Active or false
-_G.Script1Gui = _G.Script1Gui or nil
+-- Local Player
+local player = Players.LocalPlayer
+local character, humanoid, rootPart
 
--- FE Bypass Variables
-local FEBypass = {
-    Enabled = false,
-    OldCharacter = nil,
-    FakeCharacter = nil,
-    Connections = {}
+-- Connections and states
+local connections = {}
+local buttonStates = {}
+local selectedCategory = "Movement"
+local categoryStates = {} -- Store feature states per category
+local activeFeature = nil -- Track currently active exclusive feature
+local exclusiveFeatures = {} -- List of features that should be exclusive
+
+-- Settings
+local settings = {
+    FlySpeed = {value = 50, min = 10, max = 200, default = 50},
+    FreecamSpeed = {value = 50, min = 10, max = 200, default = 50},
+    JumpHeight = {value = 7.2, min = 0, max = 50, default = 7.2},
+    WalkSpeed = {value = 16, min = 10, max = 200, default = 16}
 }
 
--- Warna tema
-local Colors = {
-    Primary = Color3.fromRGB(33, 150, 243),
-    Dark = Color3.fromRGB(25, 25, 30),
-    Surface = Color3.fromRGB(40, 40, 45),
-    Green = Color3.fromRGB(76, 175, 80),
-    Orange = Color3.fromRGB(255, 152, 0),
-    Red = Color3.fromRGB(244, 67, 54),
-    Purple = Color3.fromRGB(156, 39, 176),
-    Pink = Color3.fromRGB(233, 30, 99),
-    Cyan = Color3.fromRGB(0, 188, 212),
-    Yellow = Color3.fromRGB(255, 235, 59),
-    White = Color3.fromRGB(255, 255, 255),
-    Gray = Color3.fromRGB(150, 150, 150)
-}
-
--- GUI utama
+-- ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "FEBypassAdminGui"
+ScreenGui.Name = "MinimalHackGUI"
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = LocalPlayer.PlayerGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Enabled = true
 
--- Frame utama
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 350, 0, 500)
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250)
-MainFrame.BackgroundColor3 = Colors.Dark
-MainFrame.BorderSizePixel = 0
-MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 15)
-MainCorner.Parent = MainFrame
-
--- Notifikasi Frame
-local NotificationFrame = Instance.new("Frame")
-NotificationFrame.Size = UDim2.new(0, 300, 0, 50)
-NotificationFrame.Position = UDim2.new(0.5, -150, 0, 10)
-NotificationFrame.BackgroundColor3 = Colors.Surface
-NotificationFrame.BorderSizePixel = 0
-NotificationFrame.Visible = false
-NotificationFrame.Parent = ScreenGui
-
-local NotificationCorner = Instance.new("UICorner")
-NotificationCorner.CornerRadius = UDim.new(0, 10)
-NotificationCorner.Parent = NotificationFrame
-
-local NotificationText = Instance.new("TextLabel")
-NotificationText.Size = UDim2.new(1, -10, 1, -10)
-NotificationText.Position = UDim2.new(0, 5, 0, 5)
-NotificationText.BackgroundTransparency = 1
-NotificationText.Text = ""
-NotificationText.TextColor3 = Colors.White
-NotificationText.TextSize = 12
-NotificationText.Font = Enum.Font.Gotham
-NotificationText.TextWrapped = true
-NotificationText.Parent = NotificationFrame
-
--- Fungsi untuk menampilkan notifikasi
-local function ShowNotification(message, color, duration)
-    NotificationFrame.BackgroundColor3 = color or Colors.Green
-    NotificationText.Text = message
-    NotificationFrame.Visible = true
-    spawn(function()
-        wait(duration or 3)
-        NotificationFrame.Visible = false
-    end)
+-- Check for existing script instances
+for _, gui in pairs(player.PlayerGui:GetChildren()) do
+    if gui:IsA("ScreenGui") and gui.Name == "MinimalHackGUI" and gui ~= ScreenGui then
+        gui:Destroy()
+    end
 end
 
--- Header
-local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 50)
-Header.BackgroundColor3 = Colors.Primary
-Header.BorderSizePixel = 0
-Header.Parent = MainFrame
-
-local HeaderCorner = Instance.new("UICorner")
-HeaderCorner.CornerRadius = UDim.new(0, 15)
-HeaderCorner.Parent = Header
-
-local HeaderFix = Instance.new("Frame")
-HeaderFix.Size = UDim2.new(1, 0, 0, 15)
-HeaderFix.Position = UDim2.new(0, 0, 1, -15)
-HeaderFix.BackgroundColor3 = Colors.Primary
-HeaderFix.BorderSizePixel = 0
-HeaderFix.Parent = Header
+-- Main Frame
+local Frame = Instance.new("Frame")
+Frame.Name = "MainFrame"
+Frame.Parent = ScreenGui
+Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Frame.BorderColor3 = Color3.fromRGB(45, 45, 45)
+Frame.BorderSizePixel = 1
+Frame.Position = UDim2.new(0.5, -250, 0.5, -150)
+Frame.Size = UDim2.new(0, 500, 0, 300)
+Frame.Active = true
+Frame.Draggable = true
 
 -- Title
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -80, 1, 0)
-Title.Position = UDim2.new(0, 10, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "🔥 FE Bypass Admin"
-Title.TextColor3 = Colors.White
-Title.TextSize = 16
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Font = Enum.Font.GothamBold
-Title.Parent = Header
+Title.Name = "Title"
+Title.Parent = Frame
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.BorderSizePixel = 0
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.Font = Enum.Font.Gotham
+Title.Text = "MinimalHackGUI by Fari Noveri [Backup]"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 10
 
--- Status indicator
-local Status = Instance.new("TextLabel")
-Status.Size = UDim2.new(0, 60, 0, 20)
-Status.Position = UDim2.new(1, -140, 0, 5)
-Status.BackgroundColor3 = Colors.Red
-Status.Text = "FE ON"
-Status.TextColor3 = Colors.White
-Status.TextSize = 10
-Status.Font = Enum.Font.Gotham
-Status.Parent = Header
+-- Minimized Logo
+local MinimizedLogo = Instance.new("Frame")
+MinimizedLogo.Name = "MinimizedLogo"
+MinimizedLogo.Parent = ScreenGui
+MinimizedLogo.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MinimizedLogo.BorderColor3 = Color3.fromRGB(45, 45, 45)
+MinimizedLogo.Position = UDim2.new(0, 5, 0, 5)
+MinimizedLogo.Size = UDim2.new(0, 30, 0, 30)
+MinimizedLogo.Visible = false
+MinimizedLogo.Active = true
+MinimizedLogo.Draggable = true
 
-local StatusCorner = Instance.new("UICorner")
-StatusCorner.CornerRadius = UDim.new(0, 10)
-StatusCorner.Parent = Status
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 12)
+Corner.Parent = MinimizedLogo
 
--- Tombol kontrol
-local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 30, 0, 30)
-MinBtn.Position = UDim2.new(1, -65, 0.5, -15)
-MinBtn.BackgroundColor3 = Colors.Orange
-MinBtn.BorderSizePixel = 0
-MinBtn.Text = "−"
-MinBtn.TextColor3 = Colors.White
-MinBtn.TextSize = 20
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.Parent = Header
+local LogoText = Instance.new("TextLabel")
+LogoText.Parent = MinimizedLogo
+LogoText.BackgroundTransparency = 1
+LogoText.Size = UDim2.new(1, 0, 1, 0)
+LogoText.Font = Enum.Font.GothamBold
+LogoText.Text = "H"
+LogoText.TextColor3 = Color3.fromRGB(255, 255, 255)
+LogoText.TextSize = 12
+LogoText.TextStrokeTransparency = 0.5
+LogoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 
-local MinCorner = Instance.new("UICorner")
-MinCorner.CornerRadius = UDim.new(0, 8)
-MinCorner.Parent = MinBtn
+local LogoButton = Instance.new("TextButton")
+LogoButton.Parent = MinimizedLogo
+LogoButton.BackgroundTransparency = 1
+LogoButton.Size = UDim2.new(1, 0, 1, 0)
+LogoButton.Text = ""
 
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -30, 0.5, -15)
-CloseBtn.BackgroundColor3 = Colors.Red
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Text = "✕"
-CloseBtn.TextColor3 = Colors.White
-CloseBtn.TextSize = 16
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.Parent = Header
+-- Minimize Button
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Parent = Frame
+MinimizeButton.BackgroundTransparency = 1
+MinimizeButton.Position = UDim2.new(1, -20, 0, 5) -- Adjusted position since CloseButton is removed
+MinimizeButton.Size = UDim2.new(0, 20, 0, 20)
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.Text = "-"
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.TextSize = 10
 
-local CloseCorner = Instance.new("UICorner")
-CloseCorner.CornerRadius = UDim.new(0, 8)
-CloseCorner.Parent = CloseBtn
+-- Category Container with Scrolling
+local CategoryContainer = Instance.new("ScrollingFrame")
+CategoryContainer.Parent = Frame
+CategoryContainer.BackgroundTransparency = 1
+CategoryContainer.Position = UDim2.new(0, 5, 0, 30)
+CategoryContainer.Size = UDim2.new(0, 80, 1, -35)
+CategoryContainer.ScrollBarThickness = 4
+CategoryContainer.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
+CategoryContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+CategoryContainer.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+CategoryContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
 
--- Container
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, 0, 1, -50)
-Content.Position = UDim2.new(0, 0, 0, 50)
-Content.BackgroundTransparency = 1
-Content.Parent = MainFrame
+local CategoryLayout = Instance.new("UIListLayout")
+CategoryLayout.Parent = CategoryContainer
+CategoryLayout.Padding = UDim.new(0, 3)
+CategoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CategoryLayout.FillDirection = Enum.FillDirection.Vertical
 
--- Script 1 kontrol + FE Bypass toggle
-local ControlFrame = Instance.new("Frame")
-ControlFrame.Size = UDim2.new(1, -20, 0, 90)
-ControlFrame.Position = UDim2.new(0, 10, 0, 10)
-ControlFrame.BackgroundColor3 = Colors.Surface
-ControlFrame.BorderSizePixel = 0
-ControlFrame.Parent = Content
-
-local ControlCorner = Instance.new("UICorner")
-ControlCorner.CornerRadius = UDim.new(0, 10)
-ControlCorner.Parent = ControlFrame
-
-local SwitchBtn = Instance.new("TextButton")
-SwitchBtn.Size = UDim2.new(1, -10, 0, 35)
-SwitchBtn.Position = UDim2.new(0, 5, 0, 5)
-SwitchBtn.BackgroundColor3 = Colors.Primary
-SwitchBtn.BorderSizePixel = 0
-SwitchBtn.Text = "🔄 Matikan Script 1"
-SwitchBtn.TextColor3 = Colors.White
-SwitchBtn.TextSize = 13
-SwitchBtn.Font = Enum.Font.Gotham
-SwitchBtn.Parent = ControlFrame
-
-local SwitchCorner = Instance.new("UICorner")
-SwitchCorner.CornerRadius = UDim.new(0, 8)
-SwitchCorner.Parent = SwitchBtn
-
--- FE Bypass Toggle Button
-local BypassBtn = Instance.new("TextButton")
-BypassBtn.Size = UDim2.new(1, -10, 0, 35)
-BypassBtn.Position = UDim2.new(0, 5, 0, 45)
-BypassBtn.BackgroundColor3 = Colors.Red
-BypassBtn.BorderSizePixel = 0
-BypassBtn.Text = "🛡️ Enable FE Bypass"
-BypassBtn.TextColor3 = Colors.White
-BypassBtn.TextSize = 13
-BypassBtn.Font = Enum.Font.Gotham
-BypassBtn.Parent = ControlFrame
-
-local BypassCorner = Instance.new("UICorner")
-BypassCorner.CornerRadius = UDim.new(0, 8)
-BypassCorner.Parent = BypassBtn
-
--- Tab system - Optimized horizontal scroll
-local TabFrame = Instance.new("ScrollingFrame")
-TabFrame.Size = UDim2.new(1, -20, 0, 40)
-TabFrame.Position = UDim2.new(0, 10, 0, 110)
-TabFrame.BackgroundTransparency = 1
-TabFrame.ScrollBarThickness = 6
-TabFrame.ScrollBarImageColor3 = Colors.Primary
-TabFrame.ScrollingDirection = Enum.ScrollingDirection.X
-TabFrame.CanvasSize = UDim2.new(0, 700, 0, 40)
-TabFrame.Parent = Content
-
-local TabLayout = Instance.new("UIListLayout")
-TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-TabLayout.Padding = UDim.new(0, 5)
-TabLayout.Parent = TabFrame
-
--- Update canvas size for tabs
-TabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    TabFrame.CanvasSize = UDim2.new(0, TabLayout.AbsoluteContentSize.X + 10, 0, 40)
+-- Update category canvas size when content changes
+CategoryLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    CategoryContainer.CanvasSize = UDim2.new(0, 0, 0, CategoryLayout.AbsoluteContentSize.Y + 10)
 end)
 
-local tabs = {"Spawn", "Player", "Teleport", "Server", "Fun", "Utility", "Bypass"}
-local tabButtons = {}
-local currentTab = 1
+-- Feature Container
+local FeatureContainer = Instance.new("ScrollingFrame")
+FeatureContainer.Parent = Frame
+FeatureContainer.BackgroundTransparency = 1
+FeatureContainer.Position = UDim2.new(0, 90, 0, 30)
+FeatureContainer.Size = UDim2.new(1, -95, 1, -35)
+FeatureContainer.ScrollBarThickness = 4
+FeatureContainer.ScrollBarImageColor3 = Color3.fromRGB(60, 60, 60)
+FeatureContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+FeatureContainer.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+FeatureContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+FeatureContainer.Visible = true
 
-for i, tabName in pairs(tabs) do
-    local tabBtn = Instance.new("TextButton")
-    tabBtn.Size = UDim2.new(0, 90, 1, 0)
-    tabBtn.BackgroundColor3 = Colors.Surface
-    tabBtn.BorderSizePixel = 0
-    tabBtn.Text = tabName
-    tabBtn.TextColor3 = Colors.Gray
-    tabBtn.TextSize = 12
-    tabBtn.Font = Enum.Font.Gotham
-    tabBtn.Parent = TabFrame
-    
-    local tabCorner = Instance.new("UICorner")
-    tabCorner.CornerRadius = UDim.new(0, 8)
-    tabCorner.Parent = tabBtn
-    
-    tabButtons[i] = tabBtn
-    
-    tabBtn.MouseButton1Click:Connect(function()
-        currentTab = i
-        UpdateTabs()
-        UpdateContent()
-    end)
-end
+local FeatureLayout = Instance.new("UIListLayout")
+FeatureLayout.Parent = FeatureContainer
+FeatureLayout.Padding = UDim.new(0, 2)
+FeatureLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- Optimized Scrolling frame untuk konten
-local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Size = UDim2.new(1, -20, 1, -160)
-ScrollFrame.Position = UDim2.new(0, 10, 0, 160)
-ScrollFrame.BackgroundColor3 = Colors.Surface
-ScrollFrame.BorderSizePixel = 0
-ScrollFrame.ScrollBarThickness = 8
-ScrollFrame.ScrollBarImageColor3 = Colors.Primary
-ScrollFrame.ScrollingDirection = Enum.ScrollingDirection.Y
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-ScrollFrame.ClipsDescendants = true
-ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ScrollFrame.Parent = Content
+-- Update feature canvas size when content changes
+FeatureLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    FeatureContainer.CanvasSize = UDim2.new(0, 0, 0, FeatureLayout.AbsoluteContentSize.Y + 10)
+end)
 
-local ScrollCorner = Instance.new("UICorner")
-ScrollCorner.CornerRadius = UDim.new(0, 10)
-ScrollCorner.Parent = ScrollFrame
+-- Categories
+local categories = {
+    {name = "Movement", order = 1},
+    {name = "Player", order = 2},
+    {name = "Teleport", order = 3},
+    {name = "Visual", order = 4},
+    {name = "Utility", order = 5},
+    {name = "Settings", order = 6},
+    {name = "Info", order = 7}
+}
 
-local Layout = Instance.new("UIListLayout")
-Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Layout.Padding = UDim.new(0, 8)
-Layout.Parent = ScrollFrame
+local categoryFrames = {}
+local isMinimized = false
 
--- Update tabs function
-function UpdateTabs()
-    for i, btn in pairs(tabButtons) do
-        if i == currentTab then
-            btn.BackgroundColor3 = Colors.Primary
-            btn.TextColor3 = Colors.White
-        else
-            btn.BackgroundColor3 = Colors.Surface
-            btn.TextColor3 = Colors.Gray
+-- Define exclusive features (features that can't run together)
+exclusiveFeatures = {
+    "Fly", "Noclip", "Speed", "JumpHeight", "InfiniteJump", 
+    "Freecam", "FullBright", "ESP", "Tracers", "AutoFarm"
+}
+
+-- Function to disable active feature
+local function disableActiveFeature()
+    if activeFeature then
+        local categoryName = activeFeature.category
+        local featureName = activeFeature.name
+        
+        -- Set state to false
+        if categoryStates[categoryName] and categoryStates[categoryName][featureName] ~= nil then
+            categoryStates[categoryName][featureName] = false
         end
-    end
-end
-
--- Fungsi buat tombol
-local function CreateButton(text, callback, color)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -10, 0, 40)
-    btn.BackgroundColor3 = color or Colors.Primary
-    btn.BorderSizePixel = 0
-    btn.Text = text
-    btn.TextColor3 = Colors.White
-    btn.TextSize = 13
-    btn.Font = Enum.Font.Gotham
-    btn.TextWrapped = true
-    btn.Parent = ScrollFrame
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = btn
-    
-    btn.MouseButton1Click:Connect(callback)
-    
-    btn.MouseButton1Down:Connect(function()
-        btn.BackgroundTransparency = 0.3
-    end)
-    btn.MouseButton1Up:Connect(function()
-        btn.BackgroundTransparency = 0
-    end)
-    
-    return btn
-end
-
--- Fungsi buat input teks
-local function CreateTextInput(placeholder, callback)
-    local inputFrame = Instance.new("Frame")
-    inputFrame.Size = UDim2.new(1, -10, 0, 40)
-    inputFrame.BackgroundColor3 = Colors.Surface
-    inputFrame.BorderSizePixel = 0
-    inputFrame.Parent = ScrollFrame
-    
-    local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 8)
-    inputCorner.Parent = inputFrame
-    
-    local input = Instance.new("TextBox")
-    input.Size = UDim2.new(1, -10, 1, -10)
-    input.Position = UDim2.new(0, 5, 0, 5)
-    input.BackgroundTransparency = 1
-    input.Text = placeholder
-    input.TextColor3 = Colors.Gray
-    input.TextSize = 13
-    input.Font = Enum.Font.Gotham
-    input.TextWrapped = true
-    input.Parent = inputFrame
-    
-    input.FocusLost:Connect(function(enterPressed)
-        if enterPressed then
-            callback(input.Text)
-            input.Text = placeholder
-        end
-    end)
-    
-    return inputFrame
-end
-
--- FE Bypass Functions
-local function EnableFEBypass()
-    if FEBypass.Enabled then return end
-    
-    FEBypass.Enabled = true
-    Status.Text = "BYPASS"
-    Status.BackgroundColor3 = Colors.Green
-    BypassBtn.Text = "🛡️ Disable FE Bypass"
-    BypassBtn.BackgroundColor3 = Colors.Green
-    
-    pcall(function()
-        if LocalPlayer.Character then
-            FEBypass.OldCharacter = LocalPlayer.Character
-            
-            for _, part in pairs(LocalPlayer.Character:GetChildren()) do
-                if part:IsA("BasePart") then
-                    part.Transparency = 1
-                    if part.Name == "Head" then
-                        for _, child in pairs(part:GetChildren()) do
-                            if child:IsA("Decal") then
-                                child.Transparency = 1
-                            end
-                        end
-                    end
-                end
-                if part:IsA("Accessory") then
-                    for _, accessoryPart in pairs(part:GetChildren()) do
-                        if accessoryPart:IsA("BasePart") then
-                            accessoryPart.Transparency = 1
-                        end
-                    end
-                end
-            end
-            
-            FEBypass.FakeCharacter = FEBypass.OldCharacter:Clone()
-            FEBypass.FakeCharacter.Parent = workspace
-            FEBypass.FakeCharacter.Name = LocalPlayer.Name .. "_Fake"
-            
-            for _, part in pairs(FEBypass.FakeCharacter:GetChildren()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                    part.Anchored = true
-                end
-            end
-        end
-    end)
-    
-    ShowNotification("🛡️ FE Bypass enabled!", Colors.Green)
-    print("🛡️ FE Bypass enabled!")
-end
-
-local function DisableFEBypass()
-    if not FEBypass.Enabled then return end
-    
-    FEBypass.Enabled = false
-    Status.Text = "FE ON"
-    Status.BackgroundColor3 = Colors.Red
-    BypassBtn.Text = "🛡️ Enable FE Bypass"
-    BypassBtn.BackgroundColor3 = Colors.Red
-    
-    pcall(function()
-        if FEBypass.OldCharacter then
-            for _, part in pairs(FEBypass.OldCharacter:GetChildren()) do
-                if part:IsA("BasePart") then
-                    part.Transparency = 0
-                    if part.Name == "Head" then
-                        for _, child in pairs(part:GetChildren()) do
-                            if child:IsA("Decal") then
-                                child.Transparency = 0
-                            end
-                        end
-                    end
-                end
-                if part:IsA("Accessory") then
-                    for _, accessoryPart in pairs(part:GetChildren()) do
-                        if accessoryPart:IsA("BasePart") then
-                            accessoryPart.Transparency = 0
-                        end
-                    end
-                end
+        
+        -- Find and update button appearance
+        for _, child in pairs(FeatureContainer:GetChildren()) do
+            if child:IsA("TextButton") and child.Name == featureName then
+                child.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+                break
             end
         end
         
-        if FEBypass.FakeCharacter then
-            FEBypass.FakeCharacter:Destroy()
-            FEBypass.FakeCharacter = nil
+        -- Call disable callback if available
+        if activeFeature.disableCallback then
+            pcall(activeFeature.disableCallback)
         end
-    end)
-    
-    ShowNotification("🔒 FE Bypass disabled!", Colors.Red)
-    print("🔒 FE Bypass disabled!")
-end
-
--- Teleport Player with Improved Bypass
-local function TeleportPlayerBypass(player, target)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-            ShowNotification("❌ Teleport failed: Invalid player!", Colors.Red)
-            print("❌ Teleport failed: Player " .. (player and player.Name or "nil") .. " has no valid character!")
-            return
-        end
-        if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
-            ShowNotification("❌ Teleport failed: Invalid target!", Colors.Red)
-            print("❌ Teleport failed: Target " .. (target and target.Name or "nil") .. " has no valid character!")
-            return
-        end
-        if player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health <= 0 then
-            ShowNotification("❌ Teleport failed: Player is dead!", Colors.Red)
-            print("❌ Teleport failed: Player " .. player.Name .. " is dead!")
-            return
-        end
-        if target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health <= 0 then
-            ShowNotification("❌ Teleport failed: Target is dead!", Colors.Red)
-            print("❌ Teleport failed: Target " .. target.Name .. " is dead!")
-            return
-        end
-
-        local targetPos = target.Character.HumanoidRootPart.CFrame * CFrame.new(2, 0, 0)
-        if targetPos.Position.Y > 1000 then
-            targetPos = targetPos * CFrame.new(0, -targetPos.Position.Y + 10, 0)
-            ShowNotification("⚠️ Adjusted position: Target too high!", Colors.Orange)
-            print("⚠️ Adjusted position: Target Y > 1000")
-        end
-        local rayParams = RaycastParams.new()
-        rayParams.FilterDescendantsInstances = {player.Character, target.Character}
-        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-        local rayResult = workspace:Raycast(targetPos.Position, Vector3.new(0, -10, 0), rayParams)
-        if not rayResult or rayResult.Position.Y < targetPos.Position.Y - 5 then
-            targetPos = targetPos * CFrame.new(0, 5, 0)
-            ShowNotification("⚠️ Adjusted position for safety!", Colors.Orange)
-            print("⚠️ Adjusted teleport position for safety")
-        end
-
-        local particle = Instance.new("ParticleEmitter")
-        particle.Texture = "rbxassetid://243098098"
-        particle.Size = NumberSequence.new(1, 0)
-        particle.Lifetime = NumberRange.new(0.5, 1)
-        particle.Rate = 50
-        particle.SpreadAngle = Vector2.new(360, 360)
-        particle.Parent = Instance.new("Part")
-        particle.Parent.Size = Vector3.new(0.2, 0.2, 0.2)
-        particle.Parent.Position = targetPos.Position
-        particle.Parent.Transparency = 1
-        particle.Parent.Anchored = true
-        particle.Parent.Parent = workspace
-        wait(1)
-        particle.Parent:Destroy()
-
-        player.Character.HumanoidRootPart.CFrame = targetPos
-
-        local teleportKeywords = {"teleport", "move", "tp", "relocate", "position", "update", "warp", "setposition", "updateplayer", "char", "tele", "goto"}
-        local remotesTried = {}
-        local success = false
-        local maxAttempts = 3
-        local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui, LocalPlayer.PlayerScripts}
-
-        for _, location in pairs(searchLocations) do
-            for _, obj in pairs(location:GetDescendants()) do
-                if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
-                    for _, keyword in pairs(teleportKeywords) do
-                        if string.find(string.lower(obj.Name), keyword) then
-                            table.insert(remotesTried, obj)
-                            for i = 1, maxAttempts do
-                                if obj:IsA("RemoteEvent") then
-                                    pcall(function()
-                                        obj:FireServer(player, targetPos)
-                                        obj:FireServer(player, targetPos.Position)
-                                        obj:FireServer(player.UserId, targetPos)
-                                        obj:FireServer({position = targetPos.Position})
-                                        obj:FireServer({x = targetPos.Position.X, y = targetPos.Position.Y, z = targetPos.Position.Z})
-                                        success = true
-                                    end)
-                                elseif obj:IsA("RemoteFunction") then
-                                    local invokeSuccess, result = pcall(obj.InvokeServer, obj, player, targetPos)
-                                    if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                        success = true
-                                    end
-                                    invokeSuccess, result = pcall(obj.InvokeServer, obj, player.UserId, targetPos.Position)
-                                    if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                        success = true
-                                    end
-                                    invokeSuccess, result = pcall(obj.InvokeServer, obj, {position = targetPos.Position})
-                                    if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                        success = true
-                                    end
-                                end
-                                wait(0.15)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        if not success then
-            for _, location in pairs(searchLocations) do
-                for _, obj in pairs(location:GetDescendants()) do
-                    if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
-                        table.insert(remotesTried, obj)
-                        for i = 1, maxAttempts do
-                            if obj:IsA("RemoteEvent") then
-                                pcall(function()
-                                    obj:FireServer(player, targetPos)
-                                    obj:FireServer(player, targetPos.Position)
-                                    obj:FireServer(player.UserId, targetPos)
-                                    obj:FireServer({position = targetPos.Position})
-                                    obj:FireServer({x = targetPos.Position.X, y = targetPos.Position.Y, z = targetPos.Position.Z})
-                                    success = true
-                                end)
-                            elseif obj:IsA("RemoteFunction") then
-                                local invokeSuccess, result = pcall(obj.InvokeServer, obj, player, targetPos)
-                                if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                    success = true
-                                end
-                            end
-                            wait(0.15)
-                        end
-                    end
-                end
-            end
-        end
-
-        if not success then
-            local startPos = player.Character.HumanoidRootPart.Position
-            local steps = 10
-            for i = 1, steps do
-                local interpPos = startPos + (targetPos.Position - startPos) * (i / steps)
-                player.Character.HumanoidRootPart.CFrame = CFrame.new(interpPos)
-                for _, obj in pairs(remotesTried) do
-                    if obj:IsA("RemoteEvent") then
-                        pcall(function()
-                            obj:FireServer(player, CFrame.new(interpPos))
-                            obj:FireServer(player, interpPos)
-                        end)
-                    end
-                end
-                wait(0.05)
-            end
-        end
-
-        if success then
-            ShowNotification("📞 Teleported " .. player.Name .. " to you!", Colors.Green)
-            print("📞 Teleported " .. player.Name .. " to " .. target.Name)
-            print("✅ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
-        else
-            player.Character.HumanoidRootPart.CFrame = targetPos
-            ShowNotification("⚠️ Server sync failed: No valid RemoteEvent/Function! Teleport applied locally.", Colors.Orange)
-            print("⚠️ Server sync failed: No valid RemoteEvent/Function found")
-            print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
-            print("ℹ️ Teleport applied client-sided only")
-        end
-    end, function(err)
-        ShowNotification("⚠️ Teleport error: " .. tostring(err), Colors.Red)
-        print("⚠️ Teleport error: " .. tostring(err))
-    end)
-end
-
--- Drag Object in Map with Bypass
-local function GetObjectFromRay(position)
-    local mousePos = UserInputService:GetMouseLocation()
-    local ray = workspace.CurrentCamera:ScreenPointToRay(mousePos.X, mousePos.Y)
-    local rayParams = RaycastParams.new()
-    rayParams.FilterDescendantsInstances = {LocalPlayer.Character or Instance.new("Model")}
-    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    local rayResult = workspace:Raycast(ray.Origin, ray.Direction * 1000, rayParams)
-    if rayResult and rayResult.Instance and rayResult.Instance.Parent then
-        local obj = rayResult.Instance
-        while obj and obj.Parent and not obj:IsA("Model") and not obj:IsA("BasePart") do
-            obj = obj.Parent
-        end
-        if obj and (obj:IsA("BasePart") or obj:IsA("Model")) and not obj:IsDescendantOf(Players:GetPlayers()) and not obj.Anchored then
-            return obj, rayResult.Position
-        end
-    end
-    return nil, nil
-end
-
-local function DragObjectBypass()
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        local draggingObj = nil
-        local lastPos = nil
-        local connectionInput, connectionEnded
-        local snapToGrid = false
-        local gridSize = 1
         
-        ShowNotification("🖱️ Drag mode: Click/tap object to select, drag to move, click again to release", Colors.Cyan)
-        print("🖱️ Drag mode activated: Click/tap to select object")
-        
-        connectionInput = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                if not draggingObj then
-                    local obj, hitPos = GetObjectFromRay(input.Position)
-                    if obj then
-                        if obj:IsA("BasePart") and obj.Anchored then
-                            ShowNotification("❌ Cannot drag anchored object: " .. obj.Name, Colors.Red)
-                            print("❌ Cannot drag anchored object: " .. obj.Name)
-                            return
-                        end
-                        draggingObj = obj
-                        lastPos = hitPos
-                        
-                        local particle = Instance.new("ParticleEmitter")
-                        particle.Texture = "rbxassetid://243098098"
-                        particle.Size = NumberSequence.new(0.5, 0)
-                        particle.Lifetime = NumberRange.new(0.3, 0.5)
-                        particle.Rate = 20
-                        particle.SpreadAngle = Vector2.new(360, 360)
-                        particle.Parent = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart") or Instance.new("Part")
-                        if particle.Parent ~= obj then
-                            particle.Parent.Position = obj:IsA("Model") and obj:GetPivot().Position or obj.Position
-                            particle.Parent.Transparency = 1
-                            particle.Parent.Anchored = true
-                            particle.Parent.Parent = workspace
-                        end
-                        wait(0.5)
-                        if particle.Parent ~= obj then particle.Parent:Destroy() end
-                        
-                        ShowNotification("✋ Selected object: " .. obj.Name, Colors.Green)
-                        print("✋ Selected object: " .. obj.Name)
-                    else
-                        ShowNotification("⚠️ No valid object selected!", Colors.Orange)
-                        print("⚠️ No valid object selected")
-                    end
-                else
-                    draggingObj = nil
-                    if connectionInput then connectionInput:Disconnect() end
-                    if connectionEnded then connectionEnded:Disconnect() end
-                    ShowNotification("✋ Drag mode ended", Colors.Green)
-                    print("✋ Drag mode ended")
-                end
-            end
-        end)
-        
-        connectionEnded = UserInputService.InputChanged:Connect(function(input)
-            if draggingObj and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local _, hitPos = GetObjectFromRay(input.Position)
-                if hitPos then
-                    local newPos = hitPos
-                    if snapToGrid then
-                        newPos = Vector3.new(
-                            math.floor(newPos.X / gridSize + 0.5) * gridSize,
-                            math.floor(newPos.Y / gridSize + 0.5) * gridSize,
-                            math.floor(newPos.Z / gridSize + 0.5) * gridSize
-                        )
-                    end
-                    
-                    if draggingObj:IsA("BasePart") then
-                        draggingObj.Position = newPos
-                    elseif draggingObj:IsA("Model") then
-                        draggingObj:PivotTo(CFrame.new(newPos))
-                    end
-                    
-                    local particle = Instance.new("ParticleEmitter")
-                    particle.Texture = "rbxassetid://243098098"
-                    particle.Size = NumberSequence.new(0.3, 0)
-                    particle.Lifetime = NumberRange.new(0.2, 0.4)
-                    particle.Rate = 10
-                    particle.SpreadAngle = Vector2.new(360, 360)
-                    particle.Parent = draggingObj:IsA("BasePart") and draggingObj or draggingObj:FindFirstChildOfClass("BasePart") or Instance.new("Part")
-                    if particle.Parent ~= draggingObj then
-                        particle.Parent.Position = newPos
-                        particle.Parent.Transparency = 1
-                        particle.Parent.Anchored = true
-                        particle.Parent.Parent = workspace
-                    end
-                    wait(0.3)
-                    if particle.Parent ~= draggingObj then particle.Parent:Destroy() end
-                    
-                    local moveKeywords = {"move", "position", "update", "setposition", "relocate", "warp", "teleport", "obj", "object"}
-                    local remotesTried = {}
-                    local success = false
-                    local searchLocations = {ReplicatedStorage, Workspace, LocalPlayer.PlayerGui, LocalPlayer.PlayerScripts}
-                    
-                    for _, location in pairs(searchLocations) do
-                        for _, obj in pairs(location:GetDescendants()) do
-                            if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
-                                for _, keyword in pairs(moveKeywords) do
-                                    if string.find(string.lower(obj.Name), keyword) then
-                                        table.insert(remotesTried, obj)
-                                        if obj:IsA("RemoteEvent") then
-                                            pcall(function()
-                                                obj:FireServer(draggingObj, newPos)
-                                                obj:FireServer(draggingObj, CFrame.new(newPos))
-                                                obj:FireServer({object = draggingObj, position = newPos})
-                                                obj:FireServer({x = newPos.X, y = newPos.Y, z = newPos.Z})
-                                                success = true
-                                            end)
-                                        elseif obj:IsA("RemoteFunction") then
-                                            local invokeSuccess, result = pcall(obj.InvokeServer, obj, draggingObj, newPos)
-                                            if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                                success = true
-                                            end
-                                            invokeSuccess, result = pcall(obj.InvokeServer, obj, {object = draggingObj, position = newPos})
-                                            if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                                success = true
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    
-                    if not success then
-                        for _, location in pairs(searchLocations) do
-                            for _, obj in pairs(location:GetDescendants()) do
-                                if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(remotesTried, obj) then
-                                    table.insert(remotesTried, obj)
-                                    if obj:IsA("RemoteEvent") then
-                                        pcall(function()
-                                            obj:FireServer(draggingObj, newPos)
-                                            obj:FireServer(draggingObj, CFrame.new(newPos))
-                                            obj:FireServer({object = draggingObj, position = newPos})
-                                            success = true
-                                        end)
-                                    elseif obj:IsA("RemoteFunction") then
-                                        local invokeSuccess, result = pcall(obj.InvokeServer, obj, draggingObj, newPos)
-                                        if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                                            success = true
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    
-                    if success then
-                        print("🚚 Moved object: " .. draggingObj.Name .. " to " .. tostring(newPos))
-                        print("✅ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
-                    else
-                        ShowNotification("⚠️ Server sync failed: No valid RemoteEvent/Function! Moved locally.", Colors.Orange)
-                        print("⚠️ Server sync failed: No valid RemoteEvent/Function for object: " .. draggingObj.Name)
-                        print("🛠️ Remotes tried: " .. (#remotesTried > 0 and table.concat({table.unpack(remotesTried, 1, math.min(5, #remotesTried))}, ", ") .. (#remotesTried > 5 and "..." or "") or "None"))
-                        print("ℹ️ Object moved client-sided only")
-                    end
-                end
-            end
-        end)
-    end, function(err)
-        ShowNotification("⚠️ Drag error: " .. tostring(err), Colors.Red)
-        print("⚠️ Drag error: " .. tostring(err))
-    end)
+        print("Disabled active feature: " .. featureName)
+        activeFeature = nil
+    end
 end
 
--- Explosion Features with Particle Effects
-local function SpawnExplosion(position)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        local explosion = Instance.new("Explosion")
-        explosion.Position = position
-        explosion.BlastRadius = 20
-        explosion.BlastPressure = 50000
-        explosion.DestroyJointRadiusPercent = 0
-        explosion.Parent = workspace
-        
-        local particle = Instance.new("ParticleEmitter")
-        particle.Texture = "rbxassetid://243098098"
-        particle.Size = NumberSequence.new(2, 0)
-        particle.Lifetime = NumberRange.new(0.5, 1)
-        particle.Rate = 50
-        particle.SpreadAngle = Vector2.new(360, 360)
-        particle.Parent = Instance.new("Part")
-        particle.Parent.Size = Vector3.new(0.2, 0.2, 0.2)
-        particle.Parent.Position = position
-        particle.Parent.Transparency = 1
-        particle.Parent.Anchored = true
-        particle.Parent.Parent = workspace
-        wait(1)
-        particle.Parent:Destroy()
-        
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                obj:FireServer(position, 20, 50000)
-            end
+-- Function to check if feature is exclusive
+local function isExclusiveFeature(featureName)
+    for _, exclusive in pairs(exclusiveFeatures) do
+        if string.find(featureName, exclusive) then
+            return true
         end
-        ShowNotification("💥 Explosion spawned!", Colors.Green)
-        print("💥 Explosion spawned at: " .. tostring(position))
-    end)
+    end
+    return false
 end
 
-local function SpawnCloudExplosion(player)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
+-- Load modules
+local modules = {}
+local modulesLoaded = {}
+
+local moduleURLs = {
+    Movement = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Movement.lua",
+    Player = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Player.lua",
+    Teleport = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Teleport.lua",
+    Visual = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Visual.lua",
+    Utility = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Utility.lua",
+    Settings = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Settings.lua",
+    Info = "https://raw.githubusercontent.com/FariNoveri/Supertool/main/Backup/Info.lua"
+}
+
+local function loadModule(moduleName)
+    if not moduleURLs[moduleName] then
+        warn("No URL defined for module: " .. moduleName)
+        return false
     end
     
-    pcall(function()
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local position = player.Character.HumanoidRootPart.Position + Vector3.new(0, 50, 0)
-            local explosion = Instance.new("Explosion")
-            explosion.Position = position
-            explosion.BlastRadius = 30
-            explosion.BlastPressure = 30000
-            explosion.DestroyJointRadiusPercent = 0
-            explosion.Parent = workspace
-            
-            local particle = Instance.new("ParticleEmitter")
-            particle.Texture = "rbxassetid://243098098"
-            particle.Size = NumberSequence.new(3, 0)
-            particle.Lifetime = NumberRange.new(0.7, 1.2)
-            particle.Rate = 30
-            particle.SpreadAngle = Vector2.new(360, 360)
-            particle.Parent = Instance.new("Part")
-            particle.Parent.Size = Vector3.new(0.2, 0.2, 0.2)
-            particle.Parent.Position = position
-            particle.Parent.Transparency = 1
-            particle.Parent.Anchored = true
-            particle.Parent.Parent = workspace
-            wait(1)
-            particle.Parent:Destroy()
-            
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                    obj:FireServer(position, 30, 30000)
-                end
-            end
-            ShowNotification("☁️ Cloud explosion spawned above " .. player.Name, Colors.Green)
-            print("☁️ Cloud explosion spawned above: " .. player.Name)
-        else
-            ShowNotification("❌ Cloud explosion failed: Invalid player!", Colors.Red)
+    local success, result = pcall(function()
+        local response = game:HttpGet(moduleURLs[moduleName])
+        if not response or response == "" then
+            warn("Empty or invalid response for module: " .. moduleName)
+            return nil
         end
+        local func = loadstring(response)
+        if not func then
+            warn("Failed to compile module: " .. moduleName)
+            return nil
+        end
+        local module = func()
+        if not module then
+            warn("Module " .. moduleName .. " returned nil")
+            return nil
+        end
+        return module
     end)
+    
+    if success and result then
+        modules[moduleName] = result
+        modulesLoaded[moduleName] = true
+        print("Loaded module: " .. moduleName)
+        if selectedCategory == moduleName then
+            task.spawn(loadButtons)
+        end
+        return true
+    else
+        warn("Failed to load module: " .. moduleName .. " Error: " .. tostring(result))
+        return false
+    end
 end
 
-local function SpawnExplosionToPlayer(targetPlayer)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local position = targetPlayer.Character.HumanoidRootPart.Position
-            local explosion = Instance.new("Explosion")
-            explosion.Position = position
-            explosion.BlastRadius = 15
-            explosion.BlastPressure = 40000
-            explosion.DestroyJointRadiusPercent = 0
-            explosion.Parent = workspace
-            
-            local particle = Instance.new("ParticleEmitter")
-            particle.Texture = "rbxassetid://243098098"
-            particle.Size = NumberSequence.new(1.5, 0)
-            particle.Lifetime = NumberRange.new(0.5, 1)
-            particle.Rate = 60
-            particle.SpreadAngle = Vector2.new(360, 360)
-            particle.Parent = Instance.new("Part")
-            particle.Parent.Size = Vector3.new(0.2, 0.2, 0.2)
-            particle.Parent.Position = position
-            particle.Parent.Transparency = 1
-            particle.Parent.Anchored = true
-            particle.Parent.Parent = workspace
-            wait(1)
-            particle.Parent:Destroy()
-            
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                    obj:FireServer(position, 15, 40000)
-                end
-            end
-            ShowNotification("💥 Explosion targeted at " .. targetPlayer.Name, Colors.Green)
-            print("💥 Explosion targeted at: " .. targetPlayer.Name)
-        else
-            ShowNotification("❌ Explosion failed: Invalid player!", Colors.Red)
-        end
-    end)
+-- Load all modules
+for moduleName, _ in pairs(moduleURLs) do
+    task.spawn(function() loadModule(moduleName) end)
 end
 
-local function SpamExplosion(targetPlayer)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            for i = 1, 5 do
-                local position = targetPlayer.Character.HumanoidRootPart.Position + Vector3.new(math.random(-5, 5), math.random(0, 5), math.random(-5, 5))
-                local explosion = Instance.new("Explosion")
-                explosion.Position = position
-                explosion.BlastRadius = 10
-                explosion.BlastPressure = 30000
-                explosion.DestroyJointRadiusPercent = 0
-                explosion.Parent = workspace
-                wait(0.2)
-            end
-            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "explosion") or string.find(string.lower(obj.Name), "effect")) then
-                    obj:FireServer(targetPlayer.Character.HumanoidRootPart.Position, 10, 30000)
-                end
-            end
-            ShowNotification("💥 Spam explosion targeted at " .. targetPlayer.Name, Colors.Green)
-            print("💥 Spam explosion targeted at: " .. targetPlayer.Name)
-        else
-            ShowNotification("❌ Spam explosion failed: Invalid player!", Colors.Red)
-        end
-    end)
-end
+-- Dependencies
+local dependencies = {
+    Players = Players,
+    UserInputService = UserInputService,
+    RunService = RunService,
+    Workspace = Workspace,
+    Lighting = Lighting,
+    ScreenGui = ScreenGui,
+    settings = settings,
+    connections = connections,
+    buttonStates = buttonStates,
+    player = player,
+    disableActiveFeature = disableActiveFeature,
+    isExclusiveFeature = isExclusiveFeature
+}
 
--- Kick/Ban Player
-local function KickPlayer(targetPlayer)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        local kickKeywords = {"kick", "ban", "remove", "punish"}
-        local success = false
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") and table.find(kickKeywords, string.lower(obj.Name)) then
-                obj:FireServer(targetPlayer, "Kicked by admin")
-                obj:FireServer(targetPlayer.UserId, "Kicked by admin")
-                success = true
-            end
-        end
-        if success then
-            ShowNotification("👢 Kicked " .. targetPlayer.Name, Colors.Green)
-            print("👢 Kicked: " .. targetPlayer.Name)
-        else
-            ShowNotification("⚠️ Kick attempt failed for " .. targetPlayer.Name, Colors.Red)
-            print("⚠️ Kick attempt failed: No valid RemoteEvent found")
-        end
-    end)
-end
-
--- Manipulasi Leaderstats
-local function SetLeaderstats(targetPlayer, statName, value)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        if targetPlayer:FindFirstChild("leaderstats") then
-            local stat = targetPlayer.leaderstats:FindFirstChild(statName)
-            if stat then
-                stat.Value = value
-                for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                    if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "leaderstats") or string.find(string.lower(obj.Name), "stat")) then
-                        obj:FireServer(targetPlayer, statName, value)
-                    end
-                end
-                ShowNotification("📊 Set " .. statName .. " to " .. value .. " for " .. targetPlayer.Name, Colors.Green)
-                print("📊 Set " .. statName .. " to " .. value .. " for: " .. targetPlayer.Name)
+-- Initialize modules
+local function initializeModules()
+    for moduleName, module in pairs(modules) do
+        if module and type(module.init) == "function" then
+            local success, result = pcall(function()
+                dependencies.character = character
+                dependencies.humanoid = humanoid
+                dependencies.rootPart = rootPart
+                return module.init(dependencies)
+            end)
+            if not success then
+                warn("Failed to initialize module " .. moduleName .. ": " .. tostring(result))
             else
-                ShowNotification("⚠️ Stat " .. statName .. " not found!", Colors.Red)
-            end
-        else
-            ShowNotification("⚠️ Leaderstats not found for " .. targetPlayer.Name, Colors.Red)
-        end
-    end)
-end
-
--- Spawn Tool
-local function SpawnTool()
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        local tool = Instance.new("Tool")
-        tool.Name = "AdminSword"
-        tool.RequiresHandle = true
-        local handle = Instance.new("Part")
-        handle.Name = "Handle"
-        handle.Size = Vector3.new(0.2, 2, 0.2)
-        handle.BrickColor = BrickColor.new("Really black")
-        handle.Material = Enum.Material.Metal
-        handle.Parent = tool
-        tool.Parent = LocalPlayer.Backpack
-        ShowNotification("🗡️ Spawned Admin Sword", Colors.Green)
-        print("🗡️ Spawned Admin Sword")
-    end)
-end
-
--- Server Shutdown
-local function ServerShutdown()
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-    
-    pcall(function()
-        local shutdownKeywords = {"shutdown", "close", "end", "stop"}
-        local success = false
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") and table.find(shutdownKeywords, string.lower(obj.Name)) then
-                obj:FireServer()
-                success = true
+                print("Initialized module: " .. moduleName)
             end
         end
-        if success then
-            ShowNotification("🛑 Server shutdown attempted!", Colors.Green)
-            print("🛑 Server shutdown attempted")
-        else
-            ShowNotification("⚠️ Server shutdown failed: No valid RemoteEvent!", Colors.Red)
-            print("⚠️ Server shutdown failed: No valid RemoteEvent")
-        end
-    end)
+    end
 end
 
--- Admin Command Input
-local function RunAdminCommand(command)
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
+-- Create button
+local function createButton(name, callback, categoryName)
+    local button = Instance.new("TextButton")
+    button.Name = name
+    button.Parent = FeatureContainer
+    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    button.BorderSizePixel = 0
+    button.Size = UDim2.new(1, -2, 0, 20)
+    button.Font = Enum.Font.Gotham
+    button.Text = name
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 8
+    button.LayoutOrder = #FeatureContainer:GetChildren()
     
-    pcall(function()
-        local cmdKeywords = {"cmd", "command", "admin", "execute"}
-        local success = false
-        for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") and table.find(cmdKeywords, string.lower(obj.Name)) then
-                obj:FireServer(command)
-                success = true
-            elseif obj:IsA("RemoteFunction") then
-                local invokeSuccess, result = pcall(obj.InvokeServer, obj, command)
-                if invokeSuccess and (result == true or type(result) == "table" or result == "success") then
-                    success = true
-                end
-            end
-        end
-        if success then
-            ShowNotification("📜 Command executed: " .. command, Colors.Green)
-            print("📜 Executed command: " .. command)
-        else
-            ShowNotification("⚠️ Command failed: " .. command, Colors.Red)
-            print("⚠️ Command failed: No valid RemoteEvent/Function")
-        end
-    end)
-end
-
--- Fly Mode with WASD Controls
-local function ToggleFlyMode()
-    if not FEBypass.Enabled then
-        ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-        print("❌ Enable FE Bypass first!")
-        return
-    end
-
-    local flying = false
-    local speed = 50
-    local bodyVelocity, bodyGyro
-    
-    return function()
-        pcall(function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local humanoidRootPart = LocalPlayer.Character.HumanoidRootPart
+    if type(callback) == "function" then
+        button.MouseButton1Click:Connect(function()
+            -- Check if this is an exclusive feature
+            if isExclusiveFeature(name) then
+                -- Disable currently active feature if any
+                disableActiveFeature()
                 
-                if not flying then
-                    flying = true
-                    bodyVelocity = Instance.new("BodyVelocity")
-                    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-                    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-                    bodyVelocity.Parent = humanoidRootPart
-                    
-                    bodyGyro = Instance.new("BodyGyro")
-                    bodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
-                    bodyGyro.CFrame = humanoidRootPart.CFrame
-                    bodyGyro.Parent = humanoidRootPart
-                    
-                    ShowNotification("🚀 Flying enabled!", Colors.Green)
-                    print("🚀 Flying enabled!")
-                    
-                    spawn(function()
-                        while flying and humanoidRootPart.Parent do
-                            local moveVector = Vector3.new(0, 0, 0)
-                            local camera = workspace.CurrentCamera
-                            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                                moveVector = moveVector + camera.CFrame.LookVector
-                            end
-                            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                                moveVector = moveVector - camera.CFrame.LookVector
-                            end
-                            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                                moveVector = moveVector - camera.CFrame.RightVector
-                            end
-                            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                                moveVector = moveVector + camera.CFrame.RightVector
-                            end
-                            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-                                moveVector = moveVector - Vector3.new(0, 1, 0)
-                            end
-                            if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-                                moveVector = moveVector + Vector3.new(0, 1, 0)
-                            end
-                            bodyVelocity.Velocity = moveVector * speed
-                            bodyGyro.CFrame = camera.CFrame
-                            RunService.RenderStepped:Wait()
-                        end
-                    end)
-                else
-                    flying = false
-                    if bodyVelocity then bodyVelocity:Destroy() end
-                    if bodyGyro then bodyGyro:Destroy() end
-                    ShowNotification("🚀 Flying disabled!", Colors.Green)
-                    print("🚀 Flying disabled!")
-                end
-            else
-                ShowNotification("❌ Fly failed: No character!", Colors.Red)
-                print("❌ Fly failed: No character!")
+                -- Set this as the new active feature
+                activeFeature = {
+                    name = name,
+                    category = categoryName,
+                    disableCallback = nil -- Regular buttons don't have disable callbacks
+                }
             end
+            
+            callback()
         end)
     end
+    
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    end)
+    
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end)
+    print("Created button: " .. name .. " for category: " .. categoryName)
 end
 
-local flyFunction = ToggleFlyMode()
+-- Create toggle button with exclusive feature support
+local function createToggleButton(name, callback, categoryName, disableCallback)
+    local button = Instance.new("TextButton")
+    button.Name = name
+    button.Parent = FeatureContainer
+    button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    button.BorderSizePixel = 0
+    button.Size = UDim2.new(1, -2, 0, 20)
+    button.Font = Enum.Font.Gotham
+    button.Text = name
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 8
+    button.LayoutOrder = #FeatureContainer:GetChildren()
+    
+    if categoryStates[categoryName][name] == nil then
+        categoryStates[categoryName][name] = false
+    end
+    button.BackgroundColor3 = categoryStates[categoryName][name] and Color3.fromRGB(40, 80, 40) or Color3.fromRGB(60, 60, 60)
+    
+    button.MouseButton1Click:Connect(function()
+        local newState = not categoryStates[categoryName][name]
+        
+        -- If enabling an exclusive feature
+        if newState and isExclusiveFeature(name) then
+            -- Disable currently active feature if any
+            disableActiveFeature()
+            
+            -- Set this as the new active feature
+            activeFeature = {
+                name = name,
+                category = categoryName,
+                disableCallback = disableCallback
+            }
+        elseif not newState and activeFeature and activeFeature.name == name then
+            -- If disabling the current active feature
+            activeFeature = nil
+        end
+        
+        categoryStates[categoryName][name] = newState
+        button.BackgroundColor3 = newState and Color3.fromRGB(40, 80, 40) or Color3.fromRGB(60, 60, 60)
+        
+        if type(callback) == "function" then
+            callback(newState)
+        end
+    end)
+    
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = categoryStates[categoryName][name] and Color3.fromRGB(50, 100, 50) or Color3.fromRGB(80, 80, 80)
+    end)
+    
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = categoryStates[categoryName][name] and Color3.fromRGB(40, 80, 40) or Color3.fromRGB(60, 60, 60)
+    end)
+    print("Created toggle button: " .. name .. " for category: " .. categoryName)
+end
 
--- Update content function with optimized scrolling
-function UpdateContent()
-    for _, child in pairs(ScrollFrame:GetChildren()) do
-        if child:IsA("TextButton") or child:IsA("Frame") then
+-- Load buttons implementation
+local function loadButtons()
+    -- Clear existing buttons
+    for _, child in pairs(FeatureContainer:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("TextLabel") then
             child:Destroy()
         end
     end
     
-    if currentTab == 1 then -- Spawn Tab
-        CreateButton("📦 Neon Box", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                local part = Instance.new("Part")
-                part.Name = "NeonBox"
-                part.Size = Vector3.new(4, 4, 4)
-                part.Material = Enum.Material.ForceField
-                part.BrickColor = BrickColor.Random()
-                part.CanCollide = false
-                part.Parent = workspace
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    part.Position = LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, 8, 5)
-                end
-                ShowNotification("✨ Spawned Neon Box", Colors.Green)
-                print("✨ Spawned: Neon Box")
+    -- Update category button backgrounds
+    for categoryName, categoryData in pairs(categoryFrames) do
+        categoryData.button.BackgroundColor3 = categoryName == selectedCategory and Color3.fromRGB(50, 50, 50) or Color3.fromRGB(25, 25, 25)
+    end
+
+    if not selectedCategory then
+        warn("No category selected!")
+        return
+    end
+    
+    -- Show loading label
+    local loadingLabel = Instance.new("TextLabel")
+    loadingLabel.Parent = FeatureContainer
+    loadingLabel.BackgroundTransparency = 1
+    loadingLabel.Size = UDim2.new(1, -2, 0, 20)
+    loadingLabel.Font = Enum.Font.Gotham
+    loadingLabel.Text = "Loading " .. selectedCategory .. "..."
+    loadingLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    loadingLabel.TextSize = 8
+    loadingLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    task.spawn(function()
+        -- Small delay to ensure UI updates
+        task.wait(0.2)
+        
+        local success = false
+        local errorMessage = nil
+
+        -- Load buttons based on selected category
+        if selectedCategory == "Movement" and modules.Movement and type(modules.Movement.loadMovementButtons) == "function" then
+            success, errorMessage = pcall(function()
+                print("Loading Movement buttons...")
+                modules.Movement.loadMovementButtons(
+                    function(name, callback) createButton(name, callback, "Movement") end,
+                    function(name, callback, disableCallback) createToggleButton(name, callback, "Movement", disableCallback) end
+                )
             end)
-        end, Colors.Green)
-        CreateButton("💥 Spawn Explosion", function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                SpawnExplosion(LocalPlayer.Character.HumanoidRootPart.Position)
+        elseif selectedCategory == "Player" and modules.Player and type(modules.Player.loadPlayerButtons) == "function" then
+            success, errorMessage = pcall(function()
+                local selectedPlayer = modules.Player.getSelectedPlayer and modules.Player.getSelectedPlayer() or nil
+                print("Loading Player buttons with selectedPlayer: " .. tostring(selectedPlayer))
+                modules.Player.loadPlayerButtons(
+                    function(name, callback) createButton(name, callback, "Player") end,
+                    function(name, callback, disableCallback) createToggleButton(name, callback, "Player", disableCallback) end,
+                    selectedPlayer
+                )
+            end)
+        elseif selectedCategory == "Teleport" and modules.Teleport and type(modules.Teleport.loadTeleportButtons) == "function" then
+            success, errorMessage = pcall(function()
+                local selectedPlayer = modules.Player and modules.Player.getSelectedPlayer and modules.Player.getSelectedPlayer() or nil
+                local freecamEnabled = modules.Visual and modules.Visual.getFreecamState and modules.Visual.getFreecamState() or false
+                local freecamPosition = modules.Visual and modules.Visual.getFreecamState and select(2, modules.Visual.getFreecamState()) or nil
+                local toggleFreecam = modules.Visual and modules.Visual.toggleFreecam or function() end
+                print("Loading Teleport buttons with selectedPlayer: " .. tostring(selectedPlayer))
+                modules.Teleport.loadTeleportButtons(
+                    function(name, callback) createButton(name, callback, "Teleport") end,
+                    selectedPlayer, freecamEnabled, freecamPosition, toggleFreecam
+                )
+            end)
+        elseif selectedCategory == "Visual" and modules.Visual and type(modules.Visual.loadVisualButtons) == "function" then
+            success, errorMessage = pcall(function()
+                print("Loading Visual buttons...")
+                modules.Visual.loadVisualButtons(function(name, callback, disableCallback)
+                    createToggleButton(name, callback, "Visual", disableCallback)
+                end)
+            end)
+        elseif selectedCategory == "Utility" and modules.Utility and type(modules.Utility.loadUtilityButtons) == "function" then
+            success, errorMessage = pcall(function()
+                print("Loading Utility buttons...")
+                modules.Utility.loadUtilityButtons(function(name, callback)
+                    createButton(name, callback, "Utility")
+                end)
+            end)
+        elseif selectedCategory == "Settings" and modules.Settings and type(modules.Settings.loadSettingsButtons) == "function" then
+            success, errorMessage = pcall(function()
+                print("Loading Settings buttons...")
+                modules.Settings.loadSettingsButtons(function(name, callback)
+                    createButton(name, callback, "Settings")
+                end)
+            end)
+        elseif selectedCategory == "Info" and modules.Info and type(modules.Info.loadInfoButtons) == "function" then
+            success, errorMessage = pcall(function()
+                print("Loading Info buttons...")
+                modules.Info.loadInfoButtons(function(name, callback)
+                    createButton(name, callback, "Info")
+                end)
+            end)
+        else
+            errorMessage = "Module for " .. selectedCategory .. " not loaded or invalid!"
+            warn(errorMessage)
+        end
+
+        -- Update UI based on result
+        if loadingLabel and loadingLabel.Parent then
+            if not success or errorMessage then
+                loadingLabel.Text = "Failed to load " .. selectedCategory .. " buttons: " .. tostring(errorMessage)
+                loadingLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
             else
-                ShowNotification("❌ Explosion failed: No character!", Colors.Red)
-            end
-        end, Colors.Red)
-        CreateButton("☁️ Cloud Explosion", function()
-            SpawnCloudExplosion(LocalPlayer)
-        end, Colors.Cyan)
-        CreateButton("🗡️ Spawn Admin Sword", SpawnTool, Colors.Purple)
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                CreateButton("💥 Explosion to " .. player.Name, function()
-                    SpawnExplosionToPlayer(player)
-                end, Colors.Orange)
-                CreateButton("💥 Spam Explosion " .. player.Name, function()
-                    SpamExplosion(player)
-                end, Colors.Red)
+                loadingLabel:Destroy()
             end
         end
-        
-    elseif currentTab == 2 then -- Player Tab
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                CreateButton("👤 " .. player.Name, function() end, Colors.Gray)
-                CreateButton("📞 TP " .. player.Name .. " to Me", function()
-                    TeleportPlayerBypass(player, LocalPlayer)
-                end, Colors.Orange)
-                CreateButton("👢 Kick " .. player.Name, function()
-                    KickPlayer(player)
-                end, Colors.Red)
-                CreateButton("📊 Set Money 1000", function()
-                    SetLeaderstats(player, "Money", 1000)
-                end, Colors.Green)
-            end
+    end)
+end
+
+-- Create category buttons
+for _, category in ipairs(categories) do
+    local categoryButton = Instance.new("TextButton")
+    categoryButton.Name = category.name .. "Category"
+    categoryButton.Parent = CategoryContainer
+    categoryButton.BackgroundColor3 = selectedCategory == category.name and Color3.fromRGB(50, 50, 50) or Color3.fromRGB(25, 25, 25)
+    categoryButton.BorderColor3 = Color3.fromRGB(45, 45, 45)
+    categoryButton.Size = UDim2.new(1, -5, 0, 25)
+    categoryButton.LayoutOrder = category.order
+    categoryButton.Font = Enum.Font.GothamBold
+    categoryButton.Text = category.name
+    categoryButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    categoryButton.TextSize = 8
+
+    categoryButton.MouseButton1Click:Connect(function()
+        selectedCategory = category.name
+        task.spawn(loadButtons)
+    end)
+
+    categoryButton.MouseEnter:Connect(function()
+        if selectedCategory ~= category.name then
+            categoryButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
         end
-        
-    elseif currentTab == 3 then -- Teleport Tab
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                CreateButton("🚀 TP to " .. player.Name, function()
-                    if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-                    pcall(function()
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and
-                           player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                            for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                                if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                                    obj:FireServer(LocalPlayer, player.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0))
-                                end
-                            end
-                            ShowNotification("🚀 Teleported to " .. player.Name, Colors.Green)
-                            print("🚀 Teleported to: " .. player.Name)
-                        else
-                            ShowNotification("❌ Teleport failed: Invalid player!", Colors.Red)
-                        end
-                    end)
-                end, Colors.Primary)
-            end
+    end)
+
+    categoryButton.MouseLeave:Connect(function()
+        if selectedCategory ~= category.name then
+            categoryButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
         end
-        CreateButton("🌍 TP to Spawn", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(0, 10, 0)
-                    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                        if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                            obj:FireServer(LocalPlayer, CFrame.new(0, 10, 0))
-                        end
-                    end
-                    ShowNotification("🌍 Teleported to Spawn", Colors.Green)
-                    print("🌍 Teleported to Spawn")
-                else
-                    ShowNotification("❌ Teleport failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Green)
-        CreateTextInput("Enter X,Y,Z (e.g. 100,50,200)", function(text)
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                local coords = {}
-                for num in text:gmatch("%-?%d+%.?%d*") do
-                    table.insert(coords, tonumber(num))
-                end
-                if #coords == 3 then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(coords[1], coords[2], coords[3])
-                    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                        if obj:IsA("RemoteEvent") and (string.find(string.lower(obj.Name), "teleport") or string.find(string.lower(obj.Name), "move")) then
-                            obj:FireServer(LocalPlayer, CFrame.new(coords[1], coords[2], coords[3]))
-                        end
-                    end
-                    ShowNotification("🚀 Teleported to " .. text, Colors.Green)
-                    print("🚀 Teleported to: " .. text)
-                else
-                    ShowNotification("❌ Invalid coordinates! Use format X,Y,Z", Colors.Red)
-                    print("❌ Invalid coordinates! Use format X,Y,Z")
-                end
-            end)
-        end)
-        
-    elseif currentTab == 4 then -- Server Tab
-        CreateButton("☀️ Day Time", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            Lighting.TimeOfDay = "12:00:00"
-            ShowNotification("☀️ Set to Day Time", Colors.Green)
-            print("☀️ Set to Day Time")
-        end, Colors.Orange)
-        CreateButton("🌙 Night Time", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            Lighting.TimeOfDay = "00:00:00"
-            ShowNotification("🌙 Set to Night Time", Colors.Green)
-            print("🌙 Set to Night Time")
-        end, Colors.Purple)
-        CreateButton("💡 Max Brightness", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            Lighting.Brightness = 3
-            ShowNotification("💡 Brightness set to max", Colors.Green)
-            print("💡 Brightness set to max")
-        end, Colors.Yellow)
-        CreateButton("🌑 Dark Mode", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            Lighting.Brightness = 0
-            ShowNotification("🌑 Dark Mode enabled", Colors.Green)
-            print("🌑 Dark Mode enabled")
-        end, Colors.Gray)
-        CreateButton("🌫️ Heavy Fog", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            Lighting.FogEnd = 50
-            ShowNotification("🌫️ Heavy Fog enabled", Colors.Green)
-            print("🌫️ Heavy Fog enabled")
-        end, Colors.Gray)
-        CreateButton("🌤️ Clear Sky", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            Lighting.FogEnd = 100000
-            ShowNotification("🌤️ Clear Sky enabled", Colors.Green)
-            print("🌤️ Clear Sky enabled")
-        end, Colors.Cyan)
-        CreateButton("🛑 Server Shutdown", ServerShutdown, Colors.Red)
-        
-    elseif currentTab == 5 then -- Fun Tab
-        CreateButton("🎵 Play Music", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                local sound = Instance.new("Sound")
-                sound.SoundId = "rbxassetid://142376088"
-                sound.Volume = 1
-                sound.Looped = true
-                sound.Parent = workspace
-                sound:Play()
-                ShowNotification("🎵 Music playing", Colors.Green)
-                print("🎵 Music playing")
-            end)
-        end, Colors.Pink)
-        CreateButton("🔊 Stop All Sounds", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if obj:IsA("Sound") then
-                    obj:Stop()
-                    obj:Destroy()
-                end
-            end
-            ShowNotification("🔊 All sounds stopped", Colors.Green)
-            print("🔊 All sounds stopped")
-        end, Colors.Gray)
-        
-    elseif currentTab == 6 then -- Utility Tab
-        CreateButton("🔄 Rejoin Server", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-            ShowNotification("🔄 Rejoining server...", Colors.Green)
-        end, Colors.Orange)
-        CreateButton("💀 Reset Character", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.Health = 0
-                    ShowNotification("💀 Character reset", Colors.Green)
-                    print("💀 Character reset")
-                else
-                    ShowNotification("❌ Reset failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Red)
-        CreateButton("⚡ Super Speed", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.WalkSpeed = 150
-                    ShowNotification("⚡ Super speed: 150", Colors.Green)
-                    print("⚡ Super speed: 150")
-                else
-                    ShowNotification("❌ Speed failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Green)
-        CreateButton("🐌 Normal Speed", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.WalkSpeed = 16
-                    ShowNotification("🐌 Normal speed: 16", Colors.Green)
-                    print("🐌 Normal speed: 16")
-                else
-                    ShowNotification("❌ Speed failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Gray)
-        CreateButton("🦘 Super Jump", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                    LocalPlayer.Character.Humanoid.JumpPower = 150
-                    ShowNotification("🦘 Super jump: 150", Colors.Green)
-                    print("🦘 Super jump: 150")
-                else
-                    ShowNotification("❌ Jump failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Green)
-        CreateButton("🚀 Fly Mode", flyFunction, Colors.Cyan)
-        CreateButton("🖱️ Drag Object in Map", DragObjectBypass, Colors.Purple)
-        
-    elseif currentTab == 7 then -- Bypass Tab
-        CreateButton("🛡️ Toggle FE Bypass", function()
-            if FEBypass.Enabled then
-                DisableFEBypass()
-            else
-                EnableFEBypass()
-            end
-        end, FEBypass.Enabled and Colors.Green or Colors.Red)
-        CreateButton("👻 Invisible Mode", function()
-            if not FEBypass.Enabled then ShowNotification("❌ Enable FE Bypass first!", Colors.Red); print("❌ Enable FE Bypass first!") return end
-            pcall(function()
-                if LocalPlayer.Character then
-                    for _, part in pairs(LocalPlayer.Character:GetChildren()) do
-                        if part:IsA("BasePart") then
-                            part.Transparency = part.Transparency == 0 and 1 or 0
-                        end
-                    end
-                    ShowNotification("👻 Invisibility toggled!", Colors.Green)
-                    print("👻 Invisibility toggled!")
-                else
-                    ShowNotification("❌ Invisibility failed: No character!", Colors.Red)
-                end
-            end)
-        end, Colors.Purple)
-        CreateButton("👑 Grant Admin Access", function()
-            if not FEBypass.Enabled then
-                ShowNotification("❌ Enable FE Bypass first!", Colors.Red)
-                print("❌ Enable FE Bypass first!")
-                return
-            end
-            
-            local adminSuccess = false
-            pcall(function()
-                local adminKeywords = {"admin", "mod", "cmd", "command", "privilege", "control", "access", "perm", "role", "owner"}
-                local payloads = {true, 1, "admin", "grant", "enable", LocalPlayer.Name, LocalPlayer.UserId, "owner", 999}
-                
-                for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-                    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                        for _, keyword in pairs(adminKeywords) do
-                            if string.find(string.lower(obj.Name), keyword) then
-                                if obj:IsA("RemoteEvent") then
-                                    for _, payload in pairs(payloads) do
-                                        obj:FireServer(payload)
-                                        obj:FireServer(LocalPlayer, payload)
-                                    end
-                                elseif obj:IsA("RemoteFunction") then
-                                    for _, payload in pairs(payloads) do
-                                        local success, result = pcall(obj.InvokeServer, obj, payload)
-                                        if success and (result == true or type(result) == "table" or result == "success") then
-                                            adminSuccess = true
-                                        end
-                                        success, result = pcall(obj.InvokeServer, obj, LocalPlayer, payload)
-                                        if success and (result == true or type(result) == "table" or result == "success") then
-                                            adminSuccess = true
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                
-                if LocalPlayer:FindFirstChild("PlayerGui") then
-                    for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-                        if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "admin") and gui.Enabled then
-                            adminSuccess = true
-                        end
-                    end
-                end
-                
-                LocalPlayer:SetAttribute("IsAdmin", true)
-                LocalPlayer:SetAttribute("AdminLevel", 999)
-                LocalPlayer:SetAttribute("Role", "Admin")
-                
-                if adminSuccess or LocalPlayer:GetAttribute("IsAdmin") or LocalPlayer:GetAttribute("AdminLevel") == 999 then
-                    ShowNotification("👑 Admin access granted!", Colors.Green)
-                    print("👑 Admin access granted!")
-                else
-                    ShowNotification("⚠️ Admin access attempt failed!", Colors.Red)
-                    print("⚠️ Admin access attempt failed! Check for admin privileges manually.")
-                end
-            end)
-        end, Colors.Yellow)
-        CreateTextInput("Enter Admin Command (e.g. :fly me)", function(text)
-            RunAdminCommand(text)
-        end)
+    end)
+
+    categoryFrames[category.name] = {button = categoryButton}
+    categoryStates[category.name] = {}
+end
+
+-- Minimize/Maximize
+local function toggleMinimize()
+    isMinimized = not isMinimized
+    Frame.Visible = not isMinimized
+    MinimizedLogo.Visible = isMinimized
+    MinimizeButton.Text = isMinimized and "+" or "-"
+end
+
+-- Reset states
+local function resetStates()
+    print("Resetting all states")
+    activeFeature = nil -- Reset active feature
+    
+    for _, connection in pairs(connections) do
+        if connection and connection.Disconnect then
+            connection:Disconnect()
+        end
+    end
+    connections = {}
+    
+    for _, module in pairs(modules) do
+        if module and type(module.resetStates) == "function" then
+            pcall(function() module.resetStates() end)
+        end
+    end
+    
+    if selectedCategory then
+        task.spawn(loadButtons)
     end
 end
 
--- Touch-friendly dragging
-local dragging = false
-local dragStart = nil
-local startPos = nil
+-- Character setup
+local function onCharacterAdded(newCharacter)
+    if not newCharacter then return end
+    
+    local success, result = pcall(function()
+        character = newCharacter
+        humanoid = character:WaitForChild("Humanoid", 30)
+        rootPart = character:WaitForChild("HumanoidRootPart", 30)
+        
+        dependencies.character = character
+        dependencies.humanoid = humanoid
+        dependencies.rootPart = rootPart
+        
+        initializeModules()
+        
+        if humanoid and humanoid.Died then
+            connections.humanoidDied = humanoid.Died:Connect(resetStates)
+        end
+    end)
+    if not success then
+        warn("Failed to set up character: " .. tostring(result))
+    end
+end
 
-Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
+-- Initialize
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+connections.characterAdded = player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Event connections
+MinimizeButton.MouseButton1Click:Connect(toggleMinimize)
+LogoButton.MouseButton1Click:Connect(toggleMinimize)
+
+connections.toggleGui = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.Home then
+        toggleMinimize()
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+-- Start initialization
+task.spawn(function()
+    local timeout = 15
+    local startTime = tick()
+    
+    -- Wait for critical modules to load
+    while (not modules.Movement or not modules.Player or not modules.Teleport) and tick() - startTime < timeout do
+        task.wait(0.1)
     end
-end)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
-
--- Control buttons
-local isMinimized = false
-MinBtn.MouseButton1Click:Connect(function()
-    isMinimized = not isMinimized
-    local targetSize = isMinimized and UDim2.new(0, 350, 0, 50) or UDim2.new(0, 350, 0, 500)
-    TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = targetSize}):Play()
-    wait(0.1)
-    Content.Visible = not isMinimized
-end)
-
-CloseBtn.MouseButton1Click:Connect(function()
-    if FEBypass.Enabled then
-        DisableFEBypass()
-    end
-    ScreenGui:Destroy()
-end)
-
--- Script 1 control
-SwitchBtn.MouseButton1Click:Connect(function()
-    if _G.Script1Active and _G.Script1Gui then
-        _G.Script1Active = false
-        _G.Script1Gui.Visible = false
-        SwitchBtn.Text = "🔄 Nyalakan Script 1"
-        SwitchBtn.BackgroundColor3 = Colors.Green
-        ShowNotification("🔄 Script 1 disabled", Colors.Green)
-    elseif _G.Script1Gui then
-        _G.Script1Active = true
-        _G.Script1Gui.Visible = true
-        SwitchBtn.Text = "🔄 Matikan Script 1"
-        SwitchBtn.BackgroundColor3 = Colors.Primary
-        ShowNotification("🔄 Script 1 enabled", Colors.Green)
-    end
-end)
-
--- FE Bypass toggle
-BypassBtn.MouseButton1Click:Connect(function()
-    if FEBypass.Enabled then
-        DisableFEBypass()
-    else
-        EnableFEBypass()
-    end
-end)
-
--- Auto refresh player lists
-spawn(function()
-    while ScreenGui.Parent do
-        wait(5)
-        if currentTab == 2 or currentTab == 3 or currentTab == 1 then
-            UpdateContent()
+    -- Check if modules loaded successfully
+    for _, moduleName in ipairs({"Movement", "Player", "Teleport"}) do
+        if not modules[moduleName] then
+            warn("Failed to load " .. moduleName .. " module after timeout!")
+        else
+            print(moduleName .. " module loaded successfully")
         end
     end
-end)
 
--- Initial setup
-UpdateTabs()
-UpdateContent()
-ShowNotification("🔥 FE Bypass Admin GUI Loaded!", Colors.Green)
-print("🔥 FE Bypass Admin GUI Loaded!")
+    initializeModules()
+    task.spawn(loadButtons)
+end)
