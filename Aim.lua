@@ -474,6 +474,8 @@ function AimModule.loadAimButtons(createButton, selectedPlayer, freecamEnabled, 
         aimSettings.Aimbot.visibleOnly = not aimSettings.Aimbot.visibleOnly
         print("Visible Only: " .. tostring(aimSettings.Aimbot.visibleOnly))
     end)
+    
+    print("Aim buttons loaded successfully")
 end
 
 function AimModule.resetStates()

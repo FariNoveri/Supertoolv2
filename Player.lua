@@ -617,38 +617,40 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         else
             disableMagnetPlayer()
         end
-    end, "Player")
+    end, function()
+        disableMagnetPlayer()
+    end)
     
     -- ESP Features
     createToggleButton("ESP Highlight", function(enabled)
         playerSettings.ESP.enabled = enabled
         updateESP()
-    end, "Player")
+    end, nil)
     
     createToggleButton("ESP Health", function(enabled)
         playerSettings.ESPHealth.enabled = enabled
         updateESP()
-    end, "Player")
+    end, nil)
     
     createToggleButton("ESP Names", function(enabled)
         playerSettings.NameESP.enabled = enabled
         updateESP()
-    end, "Player")
+    end, nil)
     
     createToggleButton("ESP Distance", function(enabled)
         playerSettings.DistanceESP.enabled = enabled
         updateESP()
-    end, "Player")
+    end, nil)
     
     createToggleButton("ESP Box", function(enabled)
         playerSettings.BoxESP.enabled = enabled
         updateESP()
-    end, "Player")
+    end, nil)
     
     createToggleButton("Chams", function(enabled)
         playerSettings.Chams.enabled = enabled
         updateESP()
-    end, "Player")
+    end, nil)
     
     -- ESP Settings
     createButton("ESP Color", function()
@@ -697,7 +699,26 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         else
             disableSpectate()
         end
-    end, "Player")
+    end, function()
+        disableSpectate()
+    end)
+    
+    -- Camera Mode Controls
+    createButton("Switch to FPP", function()
+        switchToFPP()
+    end)
+    
+    createButton("Switch to TPP", function()
+        switchToTPP()
+    end)
+    
+    createButton("Reset Camera", function()
+        resetCameraMode()
+    end)
+    
+    createButton("Show Camera Mode", function()
+        print("Current Camera Mode: " .. playerSettings.CameraMode.currentMode)
+    end)
     
     -- Magnet Settings
     createButton("Magnet Distance +", function()
@@ -719,6 +740,8 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         playerSettings.MagnetPlayer.speed = math.max(playerSettings.MagnetPlayer.speed - 0.05, 0.01)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
+    
+    print("Player buttons loaded successfully")
 end
 
 function PlayerModule.resetStates()
@@ -743,6 +766,11 @@ function PlayerModule.resetStates()
         spectateConnection = nil
     end
     
+    if cameraConnection then
+        cameraConnection:Disconnect()
+        cameraConnection = nil
+    end
+    
     -- Clean up ESP objects
     for _, espList in pairs(espObjects) do
         for _, espObj in pairs(espList) do
@@ -755,6 +783,7 @@ function PlayerModule.resetStates()
     
     -- Restore camera
     disableSpectate()
+    resetCameraMode()
     
     print("Player module states reset")
 end
