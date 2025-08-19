@@ -1,4 +1,4 @@
--- Aim.lua - Universal Aiming System Module (Simplified & Fixed)
+-- Aim.lua - Universal Aiming System Module (Fixed Version)
 
 local AimModule = {}
 
@@ -33,6 +33,8 @@ local currentTarget = nil
 local connections = {}
 local hookedEvents = {}
 local originalValues = {}
+local isInitialized = false
+local buttonStates = {} -- Track button states
 
 -- Utility Functions
 local function safeCall(func, ...)
@@ -41,6 +43,47 @@ local function safeCall(func, ...)
         warn("Error in safeCall: " .. tostring(result))
     end
     return success, result
+end
+
+-- Auto-reapply features after respawn
+local function setupRespawnHandler()
+    if connections.respawnHandler then
+        connections.respawnHandler:Disconnect()
+    end
+    
+    connections.respawnHandler = player.CharacterAdded:Connect(function(character)
+        wait(2) -- Wait for character to fully load
+        print("🔄 Character respawned, reapplying features...")
+        
+        -- Reapply all enabled features
+        for featureName, settings in pairs(aimSettings) do
+            if type(settings) == "table" and settings.enabled then
+                print("♻️ Reapplying: " .. featureName)
+                
+                -- Reapply specific features
+                if featureName == "Aimbot" then
+                    enableAimbot()
+                elseif featureName == "NoRecoil" then
+                    enableNoRecoil()
+                elseif featureName == "NoSpread" then
+                    enableNoSpread()
+                elseif featureName == "RapidFire" then
+                    enableRapidFire()
+                elseif featureName == "InfiniteAmmo" then
+                    enableInfiniteAmmo()
+                elseif featureName == "FastReload" then
+                    enableFastReload()
+                end
+            end
+        end
+        
+        -- Reapply silent aim hooks
+        if aimSettings.SilentAim.enabled then
+            enableSilentAim()
+        end
+        
+        print("✅ All features reapplied after respawn!")
+    end)
 end
 
 local function getClosestPlayer()
@@ -78,9 +121,12 @@ local function getClosestPlayer()
             
             -- Visibility check
             if aimSettings.Aimbot.visibleOnly then
-                local ray = Ray.new(myPos, (hrp.Position - myPos).Unit * distance)
-                local hit, pos = workspace:FindPartOnRay(ray, player.Character)
-                if hit and not hit:IsDescendantOf(otherPlayer.Character) then
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                raycastParams.FilterDescendantsInstances = {player.Character}
+                
+                local raycastResult = workspace:Raycast(myPos, (hrp.Position - myPos).Unit * distance, raycastParams)
+                if raycastResult and not raycastResult.Instance:IsDescendantOf(otherPlayer.Character) then
                     continue
                 end
             end
@@ -119,32 +165,38 @@ local function getTargetPosition(target)
     return pos
 end
 
--- Simple Aimbot
-local function enableAimbot()
+-- Enhanced Aimbot with better error handling
+function enableAimbot()
     if connections.aimbot then connections.aimbot:Disconnect() end
     
     connections.aimbot = RunService.Heartbeat:Connect(function()
         if not aimSettings.Aimbot.enabled then return end
         if not player.Character or not workspace.CurrentCamera then return end
         
-        currentTarget = getClosestPlayer()
-        if not currentTarget then return end
+        local success, result = pcall(function()
+            currentTarget = getClosestPlayer()
+            if not currentTarget then return end
+            
+            local targetPos = getTargetPosition(currentTarget)
+            if not targetPos then return end
+            
+            local camera = workspace.CurrentCamera
+            local currentCF = camera.CFrame
+            local targetCF = CFrame.lookAt(camera.CFrame.Position, targetPos)
+            
+            -- Smooth aim with better interpolation
+            camera.CFrame = currentCF:Lerp(targetCF, aimSettings.Aimbot.smoothness)
+        end)
         
-        local targetPos = getTargetPosition(currentTarget)
-        if not targetPos then return end
-        
-        local camera = workspace.CurrentCamera
-        local currentCF = camera.CFrame
-        local targetCF = CFrame.lookAt(camera.CFrame.Position, targetPos)
-        
-        -- Smooth aim
-        camera.CFrame = currentCF:Lerp(targetCF, aimSettings.Aimbot.smoothness)
+        if not success then
+            warn("Aimbot error: " .. tostring(result))
+        end
     end)
     
     print("✅ Aimbot enabled")
 end
 
-local function disableAimbot()
+function disableAimbot()
     if connections.aimbot then
         connections.aimbot:Disconnect()
         connections.aimbot = nil
@@ -153,29 +205,36 @@ local function disableAimbot()
     print("❌ Aimbot disabled")
 end
 
--- Simple Silent Aim (Hook mouse events)
-local function enableSilentAim()
+-- Enhanced Silent Aim
+function enableSilentAim()
     if not mouse then return end
     
-    -- Override mouse Hit and Target
-    local mt = getrawmetatable(mouse)
-    local oldIndex = mt.__index
-    
     safeCall(function()
+        local mt = getrawmetatable(mouse)
+        if not mt then return end
+        
+        local oldIndex = mt.__index
+        if not oldIndex then return end
+        
         setreadonly(mt, false)
         mt.__index = newcclosure(function(self, key)
-            if key == "Hit" or key == "Target" then
-                if aimSettings.SilentAim.enabled or aimSettings.AimBullet.enabled then
+            if key == "Hit" then
+                if (aimSettings.SilentAim.enabled or aimSettings.AimBullet.enabled) then
                     local target = getClosestPlayer()
                     if target then
                         local pos = getTargetPosition(target)
                         if pos then
-                            if key == "Hit" then
-                                return CFrame.new(pos)
-                            elseif key == "Target" then
-                                local part = target.Character:FindFirstChild(aimSettings.Aimbot.targetPart)
-                                return part or target.Character.HumanoidRootPart
-                            end
+                            return CFrame.new(pos)
+                        end
+                    end
+                end
+            elseif key == "Target" then
+                if (aimSettings.SilentAim.enabled or aimSettings.AimBullet.enabled) then
+                    local target = getClosestPlayer()
+                    if target then
+                        local part = target.Character:FindFirstChild(aimSettings.Aimbot.targetPart)
+                        if part then
+                            return part
                         end
                     end
                 end
@@ -188,90 +247,134 @@ local function enableSilentAim()
     print("✅ Silent Aim enabled")
 end
 
--- Universal Value Modifier
+-- Enhanced Value Modifier with better scanning
 local function modifyValues(searchTerms, newValue, restore)
     local function scanObject(obj)
-        for _, child in pairs(obj:GetChildren()) do
-            if child:IsA("NumberValue") or child:IsA("IntValue") then
-                local name = child.Name:lower()
-                for _, term in pairs(searchTerms) do
-                    if name:find(term) then
-                        if restore and originalValues[child] then
-                            child.Value = originalValues[child]
-                        elseif not restore then
-                            if not originalValues[child] then
-                                originalValues[child] = child.Value
+        if not obj or not obj.Parent then return end
+        
+        safeCall(function()
+            for _, child in pairs(obj:GetChildren()) do
+                if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("IntConstrainedValue") then
+                    local name = child.Name:lower()
+                    for _, term in pairs(searchTerms) do
+                        if name:find(term:lower()) then
+                            if restore and originalValues[child] then
+                                child.Value = originalValues[child]
+                                print("♻️ Restored: " .. child.Name .. " = " .. tostring(child.Value))
+                            elseif not restore then
+                                if not originalValues[child] then
+                                    originalValues[child] = child.Value
+                                end
+                                child.Value = newValue
+                                print("✅ Modified: " .. child.Name .. " = " .. tostring(child.Value))
                             end
-                            child.Value = newValue
                         end
-                        print((restore and "❌" or "✅") .. " Modified: " .. child.Name .. " = " .. tostring(child.Value))
                     end
                 end
+                
+                -- Also check for attributes
+                for _, attribute in pairs(child:GetAttributes()) do
+                    local attrName = tostring(attribute):lower()
+                    for _, term in pairs(searchTerms) do
+                        if attrName:find(term:lower()) then
+                            if not restore then
+                                child:SetAttribute(attrName, newValue)
+                                print("✅ Modified attribute: " .. attrName .. " = " .. tostring(newValue))
+                            end
+                        end
+                    end
+                end
+                
+                if #child:GetChildren() > 0 then
+                    scanObject(child)
+                end
             end
-            if #child:GetChildren() > 0 then
-                scanObject(child)
-            end
-        end
+        end)
     end
     
-    -- Scan player character
-    if player.Character then
-        scanObject(player.Character)
+    -- Wait for character to exist
+    if not player.Character then
+        player.CharacterAdded:Wait()
+        wait(1)
+    end
+    
+    -- Scan multiple locations
+    local locations = {
+        player.Character,
+        player.Backpack,
+        player.PlayerGui,
+        workspace:FindFirstChild(player.Name)
+    }
+    
+    for _, location in pairs(locations) do
+        if location then
+            scanObject(location)
+        end
     end
     
     -- Scan equipped tools
     if player.Character then
         for _, child in pairs(player.Character:GetChildren()) do
-            if child:IsA("Tool") then
+            if child:IsA("Tool") or child:IsA("LocalScript") or child:IsA("ModuleScript") then
                 scanObject(child)
             end
         end
     end
-    
-    -- Scan backpack
-    if player.Backpack then
-        scanObject(player.Backpack)
-    end
 end
 
--- Feature Functions
-local function enableNoRecoil()
-    modifyValues({"recoil", "kick", "sway"}, 0, false)
+-- Feature Functions with better implementation
+function enableNoRecoil()
+    spawn(function()
+        while aimSettings.NoRecoil.enabled do
+            modifyValues({"recoil", "kick", "sway", "kickback"}, 0, false)
+            wait(0.5)
+        end
+    end)
     print("✅ No Recoil enabled")
 end
 
-local function disableNoRecoil()
-    modifyValues({"recoil", "kick", "sway"}, 0, true)
+function disableNoRecoil()
+    modifyValues({"recoil", "kick", "sway", "kickback"}, 0, true)
     print("❌ No Recoil disabled")
 end
 
-local function enableNoSpread()
-    modifyValues({"spread", "accuracy", "deviation"}, 0, false)
+function enableNoSpread()
+    spawn(function()
+        while aimSettings.NoSpread.enabled do
+            modifyValues({"spread", "accuracy", "deviation", "inaccuracy"}, 0, false)
+            wait(0.5)
+        end
+    end)
     print("✅ No Spread enabled")
 end
 
-local function disableNoSpread()
-    modifyValues({"spread", "accuracy", "deviation"}, 0, true)
+function disableNoSpread()
+    modifyValues({"spread", "accuracy", "deviation", "inaccuracy"}, 0, true)
     print("❌ No Spread disabled")
 end
 
-local function enableRapidFire()
-    modifyValues({"firerate", "cooldown", "delay", "rpm"}, aimSettings.RapidFire.rate, false)
+function enableRapidFire()
+    spawn(function()
+        while aimSettings.RapidFire.enabled do
+            modifyValues({"firerate", "cooldown", "delay", "rpm", "rate"}, aimSettings.RapidFire.rate, false)
+            wait(0.3)
+        end
+    end)
     print("✅ Rapid Fire enabled")
 end
 
-local function enableInfiniteAmmo()
+function enableInfiniteAmmo()
     if connections.ammo then connections.ammo:Disconnect() end
     
     connections.ammo = RunService.Heartbeat:Connect(function()
         if not aimSettings.InfiniteAmmo.enabled then return end
-        modifyValues({"ammo", "bullet", "mag", "magazine"}, 999, false)
+        modifyValues({"ammo", "bullet", "mag", "magazine", "clip"}, 999, false)
     end)
     
     print("✅ Infinite Ammo enabled")
 end
 
-local function disableInfiniteAmmo()
+function disableInfiniteAmmo()
     if connections.ammo then
         connections.ammo:Disconnect()
         connections.ammo = nil
@@ -279,28 +382,30 @@ local function disableInfiniteAmmo()
     print("❌ Infinite Ammo disabled")
 end
 
-local function enableFastReload()
+function enableFastReload()
     if connections.reload then connections.reload:Disconnect() end
     
     connections.reload = RunService.Heartbeat:Connect(function()
         if not aimSettings.FastReload.enabled then return end
         
-        -- Speed up reload animations
-        if player.Character then
-            for _, track in pairs(player.Character.Humanoid:GetPlayingAnimationTracks()) do
-                if track.Name:lower():find("reload") then
-                    track:AdjustSpeed(aimSettings.FastReload.speed)
+        safeCall(function()
+            -- Speed up reload animations
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                for _, track in pairs(player.Character.Humanoid:GetPlayingAnimationTracks()) do
+                    if track.Name and track.Name:lower():find("reload") then
+                        track:AdjustSpeed(aimSettings.FastReload.speed)
+                    end
                 end
             end
-        end
-        
-        modifyValues({"reload"}, 0.1, false)
+            
+            modifyValues({"reload", "reloadtime", "reloadspeed"}, 0.1, false)
+        end)
     end)
     
     print("✅ Fast Reload enabled")
 end
 
-local function disableFastReload()
+function disableFastReload()
     if connections.reload then
         connections.reload:Disconnect()
         connections.reload = nil
@@ -308,36 +413,43 @@ local function disableFastReload()
     print("❌ Fast Reload disabled")
 end
 
--- Universal RemoteEvent Hook
+-- Enhanced RemoteEvent Hook
 local function hookAllRemotes()
     local function hookRemote(remote)
         if hookedEvents[remote] then return end
         
-        local oldFireServer = remote.FireServer
-        remote.FireServer = function(self, ...)
-            local args = {...}
-            
-            if (aimSettings.AimBullet.enabled or aimSettings.SilentAim.enabled) then
-                local target = getClosestPlayer()
-                if target then
-                    local pos = getTargetPosition(target)
-                    if pos then
-                        -- Try to replace Vector3 arguments
-                        for i = 1, #args do
-                            if typeof(args[i]) == "Vector3" then
-                                args[i] = pos
-                                break
+        safeCall(function()
+            local oldFireServer = remote.FireServer
+            remote.FireServer = function(self, ...)
+                local args = {...}
+                
+                if (aimSettings.AimBullet.enabled or aimSettings.SilentAim.enabled) then
+                    local target = getClosestPlayer()
+                    if target then
+                        local pos = getTargetPosition(target)
+                        if pos then
+                            -- Try to replace Vector3 arguments
+                            for i = 1, #args do
+                                if typeof(args[i]) == "Vector3" then
+                                    args[i] = pos
+                                    break
+                                end
+                                -- Also check CFrame
+                                if typeof(args[i]) == "CFrame" then
+                                    args[i] = CFrame.new(pos)
+                                    break
+                                end
                             end
                         end
                     end
                 end
+                
+                return oldFireServer(self, unpack(args))
             end
             
-            return oldFireServer(self, unpack(args))
-        end
-        
-        hookedEvents[remote] = true
-        print("🔗 Hooked: " .. remote.Name)
+            hookedEvents[remote] = true
+            print("🔗 Hooked: " .. remote.Name)
+        end)
     end
     
     -- Hook existing remotes
@@ -358,12 +470,18 @@ end
 
 -- Module Functions
 function AimModule.init(dependencies)
+    if isInitialized then return true end
+    
     print("🚀 Initializing Universal Aim Module...")
+    
+    -- Setup respawn handler first
+    setupRespawnHandler()
     
     -- Hook all remotes for silent aim
     safeCall(hookAllRemotes)
     safeCall(enableSilentAim)
     
+    isInitialized = true
     print("✅ Aim module initialized successfully")
     return true
 end
@@ -374,9 +492,11 @@ function AimModule.loadAimButtons(createButton)
         return
     end
     
-    -- Main Features
+    -- Main Features with proper state tracking
     createButton("Aimbot", function()
         aimSettings.Aimbot.enabled = not aimSettings.Aimbot.enabled
+        buttonStates["Aimbot"] = aimSettings.Aimbot.enabled
+        
         if aimSettings.Aimbot.enabled then
             enableAimbot()
         else
@@ -388,12 +508,19 @@ function AimModule.loadAimButtons(createButton)
     createButton("Silent Aim", function()
         aimSettings.SilentAim.enabled = not aimSettings.SilentAim.enabled
         aimSettings.AimBullet.enabled = aimSettings.SilentAim.enabled
+        buttonStates["Silent Aim"] = aimSettings.SilentAim.enabled
+        
+        if aimSettings.SilentAim.enabled then
+            enableSilentAim()
+        end
         print((aimSettings.SilentAim.enabled and "✅" or "❌") .. " Silent Aim: " .. tostring(aimSettings.SilentAim.enabled))
         return aimSettings.SilentAim.enabled
     end)
     
     createButton("No Recoil", function()
         aimSettings.NoRecoil.enabled = not aimSettings.NoRecoil.enabled
+        buttonStates["No Recoil"] = aimSettings.NoRecoil.enabled
+        
         if aimSettings.NoRecoil.enabled then
             enableNoRecoil()
         else
@@ -404,6 +531,8 @@ function AimModule.loadAimButtons(createButton)
     
     createButton("No Spread", function()
         aimSettings.NoSpread.enabled = not aimSettings.NoSpread.enabled
+        buttonStates["No Spread"] = aimSettings.NoSpread.enabled
+        
         if aimSettings.NoSpread.enabled then
             enableNoSpread()
         else
@@ -414,6 +543,8 @@ function AimModule.loadAimButtons(createButton)
     
     createButton("Rapid Fire", function()
         aimSettings.RapidFire.enabled = not aimSettings.RapidFire.enabled
+        buttonStates["Rapid Fire"] = aimSettings.RapidFire.enabled
+        
         if aimSettings.RapidFire.enabled then
             enableRapidFire()
         end
@@ -423,6 +554,8 @@ function AimModule.loadAimButtons(createButton)
     
     createButton("Infinite Ammo", function()
         aimSettings.InfiniteAmmo.enabled = not aimSettings.InfiniteAmmo.enabled
+        buttonStates["Infinite Ammo"] = aimSettings.InfiniteAmmo.enabled
+        
         if aimSettings.InfiniteAmmo.enabled then
             enableInfiniteAmmo()
         else
@@ -433,6 +566,8 @@ function AimModule.loadAimButtons(createButton)
     
     createButton("Fast Reload", function()
         aimSettings.FastReload.enabled = not aimSettings.FastReload.enabled
+        buttonStates["Fast Reload"] = aimSettings.FastReload.enabled
+        
         if aimSettings.FastReload.enabled then
             enableFastReload()
         else
@@ -443,12 +578,14 @@ function AimModule.loadAimButtons(createButton)
     
     createButton("Headshot Only", function()
         aimSettings.HeadshotOnly.enabled = not aimSettings.HeadshotOnly.enabled
+        buttonStates["Headshot Only"] = aimSettings.HeadshotOnly.enabled
+        
         aimSettings.Aimbot.targetPart = aimSettings.HeadshotOnly.enabled and "Head" or "HumanoidRootPart"
         print((aimSettings.HeadshotOnly.enabled and "✅" or "❌") .. " Headshot Only: " .. tostring(aimSettings.HeadshotOnly.enabled))
         return aimSettings.HeadshotOnly.enabled
     end)
     
-    -- Settings
+    -- Settings buttons
     createButton("FOV +10", function()
         aimSettings.Aimbot.fov = math.min(aimSettings.Aimbot.fov + 10, 180)
         print("📐 FOV: " .. aimSettings.Aimbot.fov)
@@ -475,12 +612,14 @@ function AimModule.loadAimButtons(createButton)
     
     createButton("Toggle Team Check", function()
         aimSettings.Aimbot.ignoreTeam = not aimSettings.Aimbot.ignoreTeam
+        buttonStates["Toggle Team Check"] = aimSettings.Aimbot.ignoreTeam
         print("👥 Ignore Team: " .. tostring(aimSettings.Aimbot.ignoreTeam))
         return aimSettings.Aimbot.ignoreTeam
     end)
     
     createButton("Toggle Wallcheck", function()
         aimSettings.Aimbot.visibleOnly = not aimSettings.Aimbot.visibleOnly
+        buttonStates["Toggle Wallcheck"] = aimSettings.Aimbot.visibleOnly
         print("👁️ Visible Only: " .. tostring(aimSettings.Aimbot.visibleOnly))
         return aimSettings.Aimbot.visibleOnly
     end)
@@ -498,9 +637,12 @@ function AimModule.resetStates()
         end
     end
     
-    -- Disconnect all connections
+    -- Clear button states
+    buttonStates = {}
+    
+    -- Disconnect all connections except respawn handler
     for name, connection in pairs(connections) do
-        if connection then
+        if connection and name ~= "respawnHandler" then
             connection:Disconnect()
             connections[name] = nil
         end
@@ -509,14 +651,15 @@ function AimModule.resetStates()
     -- Restore original values
     for obj, value in pairs(originalValues) do
         if obj and obj.Parent then
-            obj.Value = value
+            safeCall(function()
+                obj.Value = value
+            end)
         end
     end
     originalValues = {}
     
     -- Clear other states
     currentTarget = nil
-    hookedEvents = {}
     
     print("✅ All aim states reset successfully")
 end
@@ -530,15 +673,41 @@ function AimModule.getCurrentTarget()
     return currentTarget
 end
 
+function AimModule.getButtonStates()
+    return buttonStates
+end
+
 function AimModule.printStatus()
     print("=== AIM MODULE STATUS ===")
     for feature, data in pairs(aimSettings) do
         if type(data) == "table" and data.enabled ~= nil then
-            print(feature .. ": " .. (data.enabled and "✅" or "❌"))
+            print(feature .. ": " .. (data.enabled and "✅ ON" or "❌ OFF"))
         end
     end
     print("Current Target: " .. (currentTarget and currentTarget.Name or "None"))
+    print("Initialized: " .. (isInitialized and "✅" or "❌"))
     print("========================")
+end
+
+-- Auto-save states (optional enhancement)
+function AimModule.saveState()
+    local stateData = {}
+    for feature, data in pairs(aimSettings) do
+        if type(data) == "table" and data.enabled ~= nil then
+            stateData[feature] = data.enabled
+        end
+    end
+    return stateData
+end
+
+function AimModule.loadState(stateData)
+    if not stateData then return end
+    
+    for feature, enabled in pairs(stateData) do
+        if aimSettings[feature] then
+            aimSettings[feature].enabled = enabled
+        end
+    end
 end
 
 return AimModule
