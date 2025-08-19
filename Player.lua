@@ -1,4 +1,4 @@
--- Player.lua - Fixed version with better error handling
+-- Player.lua - Fixed version with toggle states and respawn persistence
 
 local PlayerModule = {}
 
@@ -43,6 +43,9 @@ local originalCameraType = nil
 local originalCameraMaxZoomDistance = nil
 local originalCameraMinZoomDistance = nil
 
+-- Button references for state updates
+local buttonStates = {}
+
 -- ESP Colors
 local espColors = {
     {name = "Cyan", color = Color3.fromRGB(0, 255, 255)},
@@ -56,6 +59,9 @@ local espColors = {
     {name = "Pink", color = Color3.fromRGB(255, 192, 203)}
 }
 local currentColorIndex = 1
+
+-- Respawn Handler
+local respawnConnection = nil
 
 -- Utility Functions
 local function shouldIgnorePlayer(targetPlayer)
@@ -142,6 +148,13 @@ local function getPreviousPlayer()
     end
     
     return prevPlayer
+end
+
+-- Function to update button state visually
+local function updateButtonState(buttonName, enabled)
+    if buttonStates[buttonName] and buttonStates[buttonName].updateState then
+        buttonStates[buttonName].updateState(enabled)
+    end
 end
 
 -- Magnet Player Functions
@@ -559,6 +572,95 @@ local function resetCameraMode()
     print("Reset to Default Camera Mode")
 end
 
+-- Respawn handling function
+local function setupRespawnHandler()
+    if respawnConnection then
+        respawnConnection:Disconnect()
+    end
+    
+    respawnConnection = player.CharacterAdded:Connect(function(newCharacter)
+        wait(1) -- Wait for character to fully load
+        
+        character = newCharacter
+        humanoid = character:WaitForChild("Humanoid")
+        rootPart = character:WaitForChild("HumanoidRootPart")
+        
+        print("Character respawned, reapplying features...")
+        
+        -- Reapply all active features
+        if playerSettings.MagnetPlayer.enabled then
+            enableMagnetPlayer()
+        end
+        
+        if playerSettings.SpectatePlayer.enabled then
+            enableSpectate()
+        end
+        
+        -- Reapply camera mode
+        if playerSettings.CameraMode.currentMode == "FPP" then
+            wait(0.5)
+            switchToFPP()
+        elseif playerSettings.CameraMode.currentMode == "TPP" then
+            wait(0.5)
+            switchToTPP()
+        end
+        
+        -- Update ESP
+        wait(0.5)
+        updateESP()
+        
+        print("All features reapplied after respawn")
+    end)
+end
+
+-- Function to reapply all active features after respawn
+local function reapplyAllFeatures()
+    wait(2) -- Extra wait to ensure character is fully loaded
+    
+    -- Reapply Magnet Player
+    if playerSettings.MagnetPlayer.enabled then
+        enableMagnetPlayer()
+        updateButtonState("Magnet Player", true)
+    end
+    
+    -- Reapply Spectate
+    if playerSettings.SpectatePlayer.enabled then
+        enableSpectate()
+        updateButtonState("Spectate Player", true)
+    end
+    
+    -- Reapply camera mode
+    if playerSettings.CameraMode.currentMode == "FPP" then
+        switchToFPP()
+    elseif playerSettings.CameraMode.currentMode == "TPP" then
+        switchToTPP()
+    end
+    
+    -- Reapply all ESP
+    if playerSettings.ESP.enabled then
+        updateButtonState("ESP Highlight", true)
+    end
+    if playerSettings.ESPHealth.enabled then
+        updateButtonState("ESP Health", true)
+    end
+    if playerSettings.NameESP.enabled then
+        updateButtonState("ESP Names", true)
+    end
+    if playerSettings.DistanceESP.enabled then
+        updateButtonState("ESP Distance", true)
+    end
+    if playerSettings.BoxESP.enabled then
+        updateButtonState("ESP Box", true)
+    end
+    if playerSettings.Chams.enabled then
+        updateButtonState("Chams", true)
+    end
+    
+    updateESP()
+    
+    print("All features reapplied and button states updated")
+end
+
 -- Module Functions
 function PlayerModule.init(dependencies)
     -- Validate dependencies
@@ -596,6 +698,9 @@ function PlayerModule.init(dependencies)
     -- Start health ESP updater
     updateHealthESP()
     
+    -- Setup respawn handler
+    setupRespawnHandler()
+    
     print("Player module initialized successfully")
     return true
 end
@@ -618,6 +723,34 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     
     selectedPlayer = currentSelectedPlayer or selectedPlayer
     
+    -- Enhanced toggle button creation with state tracking
+    local function safeCreateToggleButton(name, onCallback, offCallback)
+        local success, result = pcall(function()
+            local button = createToggleButton(name, function(enabled)
+                if onCallback then onCallback(enabled) end
+            end, offCallback)
+            
+            -- Store button reference for state updates
+            buttonStates[name] = {
+                button = button,
+                updateState = function(enabled)
+                    if button and button.updateState then
+                        button.updateState(enabled)
+                    end
+                end
+            }
+            
+            return button
+        end)
+        
+        if not success then
+            warn("Failed to create toggle button '" .. name .. "': " .. tostring(result))
+            return nil
+        end
+        
+        return result
+    end
+    
     -- Wrap button creation in pcall for error handling
     local function safeCreateButton(name, callback)
         local success, result = pcall(function()
@@ -626,19 +759,6 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         
         if not success then
             warn("Failed to create button '" .. name .. "': " .. tostring(result))
-            return nil
-        end
-        
-        return result
-    end
-    
-    local function safeCreateToggleButton(name, onCallback, offCallback)
-        local success, result = pcall(function()
-            return createToggleButton(name, onCallback, offCallback)
-        end)
-        
-        if not success then
-            warn("Failed to create toggle button '" .. name .. "': " .. tostring(result))
             return nil
         end
         
@@ -675,7 +795,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     end)
     
     -- Magnet Player
-    safeCreateToggleButton("Magnet Player", function(enabled)
+    local magnetButton = safeCreateToggleButton("Magnet Player", function(enabled)
         playerSettings.MagnetPlayer.enabled = enabled
         if enabled then
             enableMagnetPlayer()
@@ -683,36 +803,37 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
             disableMagnetPlayer()
         end
     end, function()
+        playerSettings.MagnetPlayer.enabled = false
         disableMagnetPlayer()
     end)
     
     -- ESP Features
-    safeCreateToggleButton("ESP Highlight", function(enabled)
+    local espButton = safeCreateToggleButton("ESP Highlight", function(enabled)
         playerSettings.ESP.enabled = enabled
         updateESP()
     end, nil)
     
-    safeCreateToggleButton("ESP Health", function(enabled)
+    local healthButton = safeCreateToggleButton("ESP Health", function(enabled)
         playerSettings.ESPHealth.enabled = enabled
         updateESP()
     end, nil)
     
-    safeCreateToggleButton("ESP Names", function(enabled)
+    local nameButton = safeCreateToggleButton("ESP Names", function(enabled)
         playerSettings.NameESP.enabled = enabled
         updateESP()
     end, nil)
     
-    safeCreateToggleButton("ESP Distance", function(enabled)
+    local distanceButton = safeCreateToggleButton("ESP Distance", function(enabled)
         playerSettings.DistanceESP.enabled = enabled
         updateESP()
     end, nil)
     
-    safeCreateToggleButton("ESP Box", function(enabled)
+    local boxButton = safeCreateToggleButton("ESP Box", function(enabled)
         playerSettings.BoxESP.enabled = enabled
         updateESP()
     end, nil)
     
-    safeCreateToggleButton("Chams", function(enabled)
+    local chamsButton = safeCreateToggleButton("Chams", function(enabled)
         playerSettings.Chams.enabled = enabled
         updateESP()
     end, nil)
@@ -757,7 +878,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         end
     end)
     
-    safeCreateToggleButton("Spectate Player", function(enabled)
+    local spectateButton = safeCreateToggleButton("Spectate Player", function(enabled)
         playerSettings.SpectatePlayer.enabled = enabled
         if enabled then
             enableSpectate()
@@ -765,6 +886,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
             disableSpectate()
         end
     end, function()
+        playerSettings.SpectatePlayer.enabled = false
         disableSpectate()
     end)
     
@@ -806,6 +928,19 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
     
+    -- Update button states to show current settings
+    spawn(function()
+        wait(0.5) -- Wait for buttons to be created
+        updateButtonState("Magnet Player", playerSettings.MagnetPlayer.enabled)
+        updateButtonState("ESP Highlight", playerSettings.ESP.enabled)
+        updateButtonState("ESP Health", playerSettings.ESPHealth.enabled)
+        updateButtonState("ESP Names", playerSettings.NameESP.enabled)
+        updateButtonState("ESP Distance", playerSettings.DistanceESP.enabled)
+        updateButtonState("ESP Box", playerSettings.BoxESP.enabled)
+        updateButtonState("Chams", playerSettings.Chams.enabled)
+        updateButtonState("Spectate Player", playerSettings.SpectatePlayer.enabled)
+    end)
+    
     print("Player buttons loaded successfully")
     return true
 end
@@ -837,6 +972,11 @@ function PlayerModule.resetStates()
         cameraConnection = nil
     end
     
+    if respawnConnection then
+        respawnConnection:Disconnect()
+        respawnConnection = nil
+    end
+    
     -- Clean up ESP objects
     for _, espList in pairs(espObjects) do
         for _, espObj in pairs(espList) do
@@ -851,8 +991,165 @@ function PlayerModule.resetStates()
     disableSpectate()
     resetCameraMode()
     
+    -- Update button states
+    for buttonName, _ in pairs(buttonStates) do
+        updateButtonState(buttonName, false)
+    end
+    
     print("Player module states reset successfully")
     return true
+end
+
+-- Function to save current settings state
+function PlayerModule.saveSettings()
+    return {
+        MagnetPlayer = {
+            enabled = playerSettings.MagnetPlayer.enabled,
+            distance = playerSettings.MagnetPlayer.distance,
+            speed = playerSettings.MagnetPlayer.speed
+        },
+        ESP = {
+            enabled = playerSettings.ESP.enabled,
+            color = playerSettings.ESP.color,
+            ignoreTeam = playerSettings.ESP.ignoreTeam,
+            transparency = playerSettings.ESP.transparency
+        },
+        ESPHealth = {
+            enabled = playerSettings.ESPHealth.enabled,
+            ignoreTeam = playerSettings.ESPHealth.ignoreTeam
+        },
+        NameESP = {
+            enabled = playerSettings.NameESP.enabled,
+            ignoreTeam = playerSettings.NameESP.ignoreTeam,
+            color = playerSettings.NameESP.color
+        },
+        DistanceESP = {
+            enabled = playerSettings.DistanceESP.enabled,
+            ignoreTeam = playerSettings.DistanceESP.ignoreTeam,
+            color = playerSettings.DistanceESP.color
+        },
+        BoxESP = {
+            enabled = playerSettings.BoxESP.enabled,
+            ignoreTeam = playerSettings.BoxESP.ignoreTeam,
+            color = playerSettings.BoxESP.color
+        },
+        Chams = {
+            enabled = playerSettings.Chams.enabled,
+            ignoreTeam = playerSettings.Chams.ignoreTeam,
+            color = playerSettings.Chams.color
+        },
+        SpectatePlayer = {
+            enabled = playerSettings.SpectatePlayer.enabled
+        },
+        CameraMode = {
+            currentMode = playerSettings.CameraMode.currentMode
+        },
+        selectedPlayerName = selectedPlayer and selectedPlayer.Name or nil,
+        currentColorIndex = currentColorIndex
+    }
+end
+
+-- Function to load settings state
+function PlayerModule.loadSettings(savedSettings)
+    if not savedSettings then return false end
+    
+    -- Load all settings
+    for category, settings in pairs(savedSettings) do
+        if playerSettings[category] then
+            for setting, value in pairs(settings) do
+                if playerSettings[category][setting] ~= nil then
+                    playerSettings[category][setting] = value
+                end
+            end
+        end
+    end
+    
+    -- Restore selected player
+    if savedSettings.selectedPlayerName then
+        local targetPlayer = Players:FindFirstChild(savedSettings.selectedPlayerName)
+        if targetPlayer then
+            selectedPlayer = targetPlayer
+        end
+    end
+    
+    -- Restore color index
+    if savedSettings.currentColorIndex then
+        currentColorIndex = savedSettings.currentColorIndex
+    end
+    
+    -- Reapply active features
+    spawn(function()
+        wait(1)
+        reapplyAllFeatures()
+    end)
+    
+    print("Settings loaded and features reapplied")
+    return true
+end
+
+-- Function to handle player leaving
+local function handlePlayerLeaving()
+    Players.PlayerRemoving:Connect(function(leavingPlayer)
+        if leavingPlayer == selectedPlayer then
+            -- Find next available player
+            selectedPlayer = getNextPlayer()
+            if selectedPlayer then
+                print("Selected player left, switched to: " .. selectedPlayer.Name)
+            else
+                print("Selected player left, no other players available")
+            end
+        end
+        
+        -- Update ESP when any player leaves
+        wait(0.5)
+        updateESP()
+    end)
+    
+    -- Handle new players joining
+    Players.PlayerAdded:Connect(function(newPlayer)
+        wait(2) -- Wait for player to load
+        updateESP()
+        
+        -- If no player is selected, select the new player
+        if not selectedPlayer and newPlayer ~= player then
+            selectedPlayer = newPlayer
+            print("New player joined and selected: " .. newPlayer.Name)
+        end
+    end)
+end
+
+-- Enhanced initialization with player event handling
+local function enhancedInit()
+    -- Handle player leaving/joining events
+    handlePlayerLeaving()
+    
+    -- Monitor player characters being added (respawns)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player then
+            p.CharacterAdded:Connect(function()
+                wait(1)
+                if playerSettings.ESP.enabled or playerSettings.ESPHealth.enabled or 
+                   playerSettings.NameESP.enabled or playerSettings.DistanceESP.enabled or 
+                   playerSettings.BoxESP.enabled or playerSettings.Chams.enabled then
+                    updateESP()
+                end
+            end)
+        end
+    end
+    
+    -- Handle new players that join later
+    Players.PlayerAdded:Connect(function(newPlayer)
+        if newPlayer ~= player then
+            newPlayer.CharacterAdded:Connect(function()
+                wait(1)
+                if playerSettings.ESP.enabled or playerSettings.ESPHealth.enabled or 
+                   playerSettings.NameESP.enabled or playerSettings.DistanceESP.enabled or 
+                   playerSettings.BoxESP.enabled or playerSettings.Chams.enabled then
+                    updateESP()
+                end
+            end)
+        end
+    end)
 end
 
 -- Debug function to help troubleshoot issues
@@ -864,18 +1161,26 @@ function PlayerModule.getDebugInfo()
         activeConnections = {
             magnet = magnetConnection ~= nil,
             spectate = spectateConnection ~= nil,
-            camera = cameraConnection ~= nil
+            camera = cameraConnection ~= nil,
+            respawn = respawnConnection ~= nil
         },
         settings = {
             magnetEnabled = playerSettings.MagnetPlayer.enabled,
             espEnabled = playerSettings.ESP.enabled,
-            spectateEnabled = playerSettings.SpectatePlayer.enabled
-        }
+            spectateEnabled = playerSettings.SpectatePlayer.enabled,
+            cameraMode = playerSettings.CameraMode.currentMode
+        },
+        buttonStatesCount = 0
     }
     
     -- Count ESP objects
     for espType, espList in pairs(espObjects) do
         debugInfo.espObjectsCount[espType] = #espList
+    end
+    
+    -- Count button states
+    for _ in pairs(buttonStates) do
+        debugInfo.buttonStatesCount = debugInfo.buttonStatesCount + 1
     end
     
     return debugInfo
@@ -895,7 +1200,7 @@ function PlayerModule.validateState()
     
     if selectedPlayer and not Players:FindFirstChild(selectedPlayer.Name) then
         table.insert(issues, "Selected player no longer exists")
-        selectedPlayer = nil
+        selectedPlayer = getNextPlayer() -- Auto-fix
     end
     
     -- Check for orphaned connections
@@ -903,6 +1208,7 @@ function PlayerModule.validateState()
     if magnetConnection then activeConnections = activeConnections + 1 end
     if spectateConnection then activeConnections = activeConnections + 1 end
     if cameraConnection then activeConnections = activeConnections + 1 end
+    if respawnConnection then activeConnections = activeConnections + 1 end
     
     if activeConnections > 0 then
         print("Active connections: " .. activeConnections)
@@ -910,5 +1216,59 @@ function PlayerModule.validateState()
     
     return issues
 end
+
+-- Function to force refresh all features
+function PlayerModule.forceRefresh()
+    print("Force refreshing all player features...")
+    
+    -- Reapply all active features
+    if playerSettings.MagnetPlayer.enabled then
+        disableMagnetPlayer()
+        wait(0.1)
+        enableMagnetPlayer()
+    end
+    
+    if playerSettings.SpectatePlayer.enabled then
+        disableSpectate()
+        wait(0.1)
+        enableSpectate()
+    end
+    
+    -- Refresh ESP
+    updateESP()
+    
+    -- Update all button states
+    for buttonName in pairs(buttonStates) do
+        local enabled = false
+        
+        if buttonName == "Magnet Player" then
+            enabled = playerSettings.MagnetPlayer.enabled
+        elseif buttonName == "ESP Highlight" then
+            enabled = playerSettings.ESP.enabled
+        elseif buttonName == "ESP Health" then
+            enabled = playerSettings.ESPHealth.enabled
+        elseif buttonName == "ESP Names" then
+            enabled = playerSettings.NameESP.enabled
+        elseif buttonName == "ESP Distance" then
+            enabled = playerSettings.DistanceESP.enabled
+        elseif buttonName == "ESP Box" then
+            enabled = playerSettings.BoxESP.enabled
+        elseif buttonName == "Chams" then
+            enabled = playerSettings.Chams.enabled
+        elseif buttonName == "Spectate Player" then
+            enabled = playerSettings.SpectatePlayer.enabled
+        end
+        
+        updateButtonState(buttonName, enabled)
+    end
+    
+    print("Force refresh completed")
+end
+
+-- Initialize enhanced features when module loads
+spawn(function()
+    wait(2)
+    enhancedInit()
+end)
 
 return PlayerModule
