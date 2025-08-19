@@ -1,5 +1,3 @@
--- Player.lua - Fixed version with toggle states and respawn persistence
-
 local PlayerModule = {}
 
 -- Services
@@ -19,7 +17,7 @@ local mouse
 
 -- Player Settings
 local playerSettings = {
-    MagnetPlayer = {enabled = false, distance = 50, speed = 0.1, targetPlayer = nil},
+    MagnetPlayer = {enabled = false, distance = 50, speed = 5, targetPlayer = nil}, -- Adjusted speed for smoother movement
     ESP = {enabled = false, color = Color3.fromRGB(0, 255, 255), ignoreTeam = true, transparency = 0.5},
     ESPHealth = {enabled = false, ignoreTeam = true, showBar = true, showText = true},
     NameESP = {enabled = false, ignoreTeam = true, color = Color3.fromRGB(255, 255, 255)},
@@ -29,7 +27,7 @@ local playerSettings = {
     Chams = {enabled = false, ignoreTeam = true, color = Color3.fromRGB(255, 0, 0)},
     PlayerTeleport = {enabled = false},
     SpectatePlayer = {enabled = false, targetPlayer = nil},
-    CameraMode = {currentMode = "Default"} -- Default, FPP, TPP
+    CameraMode = {currentMode = "Default"}
 }
 
 -- State variables
@@ -66,24 +64,13 @@ local respawnConnection = nil
 -- Utility Functions
 local function shouldIgnorePlayer(targetPlayer)
     if not targetPlayer or targetPlayer == player then return true end
-    
-    -- Team check
-    if playerSettings.ESP.ignoreTeam and targetPlayer.Team == player.Team then
-        return true
-    end
-    
+    if playerSettings.ESP.ignoreTeam and targetPlayer.Team == player.Team then return true end
     return false
 end
 
 local function getPlayerDistance(targetPlayer)
-    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return math.huge
-    end
-    
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-        return math.huge
-    end
-    
+    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then return math.huge end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return math.huge end
     local distance = (player.Character.HumanoidRootPart.Position - targetPlayer.Character.HumanoidRootPart.Position).Magnitude
     return math.floor(distance)
 end
@@ -91,66 +78,45 @@ end
 local function getNextPlayer()
     local playerList = Players:GetPlayers()
     if #playerList <= 1 then return nil end
-    
     local currentIndex = 1
-    
     for i, p in ipairs(playerList) do
         if p == selectedPlayer then
             currentIndex = i
             break
         end
     end
-    
     local nextIndex = currentIndex + 1
-    if nextIndex > #playerList then
-        nextIndex = 1
-    end
-    
-    -- Skip self
+    if nextIndex > #playerList then nextIndex = 1 end
     local nextPlayer = playerList[nextIndex]
     if nextPlayer == player then
         nextIndex = nextIndex + 1
-        if nextIndex > #playerList then
-            nextIndex = 1
-        end
+        if nextIndex > #playerList then nextIndex = 1 end
         nextPlayer = playerList[nextIndex]
     end
-    
     return nextPlayer
 end
 
 local function getPreviousPlayer()
     local playerList = Players:GetPlayers()
     if #playerList <= 1 then return nil end
-    
     local currentIndex = 1
-    
     for i, p in ipairs(playerList) do
         if p == selectedPlayer then
             currentIndex = i
             break
         end
     end
-    
     local prevIndex = currentIndex - 1
-    if prevIndex < 1 then
-        prevIndex = #playerList
-    end
-    
-    -- Skip self
+    if prevIndex < 1 then prevIndex = #playerList end
     local prevPlayer = playerList[prevIndex]
     if prevPlayer == player then
         prevIndex = prevIndex - 1
-        if prevIndex < 1 then
-            prevIndex = #playerList
-        end
+        if prevIndex < 1 then prevIndex = #playerList end
         prevPlayer = playerList[prevIndex]
     end
-    
     return prevPlayer
 end
 
--- Function to update button state visually
 local function updateButtonState(buttonName, enabled)
     if buttonStates[buttonName] and buttonStates[buttonName].updateState then
         buttonStates[buttonName].updateState(enabled)
@@ -160,52 +126,39 @@ end
 -- Magnet Player Functions
 local function enableMagnetPlayer()
     if magnetConnection then magnetConnection:Disconnect() end
-    
     magnetConnection = RunService.Heartbeat:Connect(function()
         if not playerSettings.MagnetPlayer.enabled then return end
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
-        
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") then return end
+        local playerRootPart = player.Character.HumanoidRootPart
+        local playerHumanoid = player.Character.Humanoid
         local camera = Workspace.CurrentCamera
         if not camera then return end
-        
-        local playerRootPart = player.Character.HumanoidRootPart
-        local cameraPosition = camera.CFrame.Position
-        local cameraLookVector = camera.CFrame.LookVector
-        
-        -- Find all enemy players and magnet them to crosshair
+        local closestPlayer, closestDistance = nil, playerSettings.MagnetPlayer.distance
         for _, targetPlayer in pairs(Players:GetPlayers()) do
             if not shouldIgnorePlayer(targetPlayer) and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local targetRootPart = targetPlayer.Character.HumanoidRootPart
                 local distanceToPlayer = (playerRootPart.Position - targetRootPart.Position).Magnitude
-                
-                if distanceToPlayer <= playerSettings.MagnetPlayer.distance then
-                    -- Calculate crosshair position (where camera is looking)
-                    local crosshairPosition = cameraPosition + (cameraLookVector * 100)
-                    
-                    -- Move enemy towards crosshair position smoothly
-                    local currentPos = targetRootPart.Position
-                    local targetPos = crosshairPosition
-                    local direction = (targetPos - currentPos).Unit
-                    
-                    -- Apply magnet force
-                    local newPos = currentPos + direction * playerSettings.MagnetPlayer.speed
-                    
-                    -- Keep enemy at reasonable distance from camera (5-10 studs in front)
-                    local distanceFromCamera = (newPos - cameraPosition).Magnitude
-                    if distanceFromCamera < 8 then
-                        newPos = cameraPosition + cameraLookVector * 8
-                    elseif distanceFromCamera > 15 then
-                        newPos = cameraPosition + cameraLookVector * 15
-                    end
-                    
-                    -- Apply the new position
-                    targetRootPart.CFrame = CFrame.new(newPos, cameraPosition)
+                if distanceToPlayer <= closestDistance then
+                    closestPlayer = targetPlayer
+                    closestDistance = distanceToPlayer
                 end
             end
         end
+        if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetRootPart = closestPlayer.Character.HumanoidRootPart
+            local direction = (targetRootPart.Position - playerRootPart.Position).Unit
+            local targetPos = playerRootPart.Position + direction * playerSettings.MagnetPlayer.speed
+            local distanceFromTarget = (targetPos - targetRootPart.Position).Magnitude
+            if distanceFromTarget < 5 then
+                targetPos = targetRootPart.Position + (direction * -5)
+            elseif distanceFromTarget > 10 then
+                targetPos = targetRootPart.Position + (direction * -10)
+            end
+            playerHumanoid:MoveTo(targetPos)
+            print("Magnet Player: Moving to " .. closestPlayer.Name)
+        end
     end)
-    
-    print("Magnet Player enabled - Enemies will be pulled to your crosshair")
+    print("Magnet Player enabled - Moving towards closest enemy")
 end
 
 local function disableMagnetPlayer()
@@ -219,13 +172,8 @@ end
 -- ESP Functions
 local function createHighlight(targetPlayer)
     if not targetPlayer.Character then return nil end
-    
-    -- Remove any existing highlight first
     local existingHighlight = targetPlayer.Character:FindFirstChild("PlayerESP_" .. targetPlayer.Name)
-    if existingHighlight then
-        existingHighlight:Destroy()
-    end
-    
+    if existingHighlight then existingHighlight:Destroy() end
     local highlight = Instance.new("Highlight")
     highlight.Name = "PlayerESP_" .. targetPlayer.Name
     highlight.Parent = targetPlayer.Character
@@ -235,14 +183,12 @@ local function createHighlight(targetPlayer)
     highlight.OutlineTransparency = 0
     highlight.Adornee = targetPlayer.Character
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    
     print("ESP Highlight created for: " .. targetPlayer.Name)
     return highlight
 end
 
 local function createHealthESP(targetPlayer)
     if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then return nil end
-    
     local head = targetPlayer.Character.Head
     local gui = Instance.new("BillboardGui")
     gui.Name = "HealthESP_" .. targetPlayer.Name
@@ -250,7 +196,6 @@ local function createHealthESP(targetPlayer)
     gui.Size = UDim2.new(0, 100, 0, 50)
     gui.StudsOffset = Vector3.new(0, 2, 0)
     gui.AlwaysOnTop = true
-    
     if playerSettings.ESPHealth.showBar then
         local healthBarBG = Instance.new("Frame")
         healthBarBG.Name = "HealthBarBG"
@@ -260,7 +205,6 @@ local function createHealthESP(targetPlayer)
         healthBarBG.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
         healthBarBG.BorderSizePixel = 1
         healthBarBG.BorderColor3 = Color3.fromRGB(255, 255, 255)
-        
         local healthBar = Instance.new("Frame")
         healthBar.Name = "HealthBar"
         healthBar.Parent = healthBarBG
@@ -269,7 +213,6 @@ local function createHealthESP(targetPlayer)
         healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         healthBar.BorderSizePixel = 0
     end
-    
     if playerSettings.ESPHealth.showText then
         local healthText = Instance.new("TextLabel")
         healthText.Name = "HealthText"
@@ -284,13 +227,11 @@ local function createHealthESP(targetPlayer)
         healthText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         healthText.Text = "100/100"
     end
-    
     return gui
 end
 
 local function createNameESP(targetPlayer)
     if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then return nil end
-    
     local head = targetPlayer.Character.Head
     local gui = Instance.new("BillboardGui")
     gui.Name = "NameESP_" .. targetPlayer.Name
@@ -298,7 +239,6 @@ local function createNameESP(targetPlayer)
     gui.Size = UDim2.new(0, 200, 0, 25)
     gui.StudsOffset = Vector3.new(0, 3, 0)
     gui.AlwaysOnTop = true
-    
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "NameLabel"
     nameLabel.Parent = gui
@@ -310,13 +250,11 @@ local function createNameESP(targetPlayer)
     nameLabel.TextStrokeTransparency = 0
     nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     nameLabel.Text = targetPlayer.DisplayName or targetPlayer.Name
-    
     return gui
 end
 
 local function createDistanceESP(targetPlayer)
     if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then return nil end
-    
     local head = targetPlayer.Character.Head
     local gui = Instance.new("BillboardGui")
     gui.Name = "DistanceESP_" .. targetPlayer.Name
@@ -324,7 +262,6 @@ local function createDistanceESP(targetPlayer)
     gui.Size = UDim2.new(0, 100, 0, 20)
     gui.StudsOffset = Vector3.new(0, -1, 0)
     gui.AlwaysOnTop = true
-    
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.Name = "DistanceLabel"
     distanceLabel.Parent = gui
@@ -336,13 +273,11 @@ local function createDistanceESP(targetPlayer)
     distanceLabel.TextStrokeTransparency = 0
     distanceLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     distanceLabel.Text = getPlayerDistance(targetPlayer) .. "m"
-    
     return gui
 end
 
 local function createBoxESP(targetPlayer)
     if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
-    
     local rootPart = targetPlayer.Character.HumanoidRootPart
     local gui = Instance.new("BillboardGui")
     gui.Name = "BoxESP_" .. targetPlayer.Name
@@ -350,7 +285,6 @@ local function createBoxESP(targetPlayer)
     gui.Size = UDim2.new(0, 4, 0, 6)
     gui.StudsOffset = Vector3.new(0, 0, 0)
     gui.AlwaysOnTop = true
-    
     local box = Instance.new("Frame")
     box.Name = "Box"
     box.Parent = gui
@@ -358,21 +292,15 @@ local function createBoxESP(targetPlayer)
     box.BackgroundTransparency = 1
     box.BorderSizePixel = 2
     box.BorderColor3 = playerSettings.BoxESP.color
-    
     return gui
 end
 
 local function createChams(targetPlayer)
     if not targetPlayer.Character then return nil end
-    
     for _, part in pairs(targetPlayer.Character:GetChildren()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-            -- Remove existing chams first
             local existingChams = part:FindFirstChild("Chams_" .. targetPlayer.Name)
-            if existingChams then
-                existingChams:Destroy()
-            end
-            
+            if existingChams then existingChams:Destroy() end
             local chams = Instance.new("SelectionBox")
             chams.Name = "Chams_" .. targetPlayer.Name
             chams.Parent = part
@@ -381,117 +309,74 @@ local function createChams(targetPlayer)
             chams.Transparency = 0.3
             chams.LineThickness = 0.2
             chams.SurfaceTransparency = 0.8
-            
-            -- Make part slightly transparent so chams are more visible
             if part.Transparency < 0.9 then
                 part.Transparency = 0.7
             end
         end
     end
-    
     print("Chams created for: " .. targetPlayer.Name)
 end
 
 local function updateESP()
-    -- Clear existing ESP
     for _, espList in pairs(espObjects) do
         for _, espObj in pairs(espList) do
-            if espObj and espObj.Parent then
-                espObj:Destroy()
-            end
+            if espObj and espObj.Parent then espObj:Destroy() end
         end
     end
     espObjects = {highlight = {}, health = {}, name = {}, distance = {}, box = {}, chams = {}}
-    
-    -- Create ESP for all enemy players
     for _, targetPlayer in pairs(Players:GetPlayers()) do
         if not shouldIgnorePlayer(targetPlayer) and targetPlayer.Character then
-            -- Highlight ESP (makes enemies glow)
             if playerSettings.ESP.enabled then
                 local highlight = createHighlight(targetPlayer)
-                if highlight then
-                    table.insert(espObjects.highlight, highlight)
-                end
+                if highlight then table.insert(espObjects.highlight, highlight) end
             end
-            
-            -- Health ESP (shows health bar and numbers)
             if playerSettings.ESPHealth.enabled then
                 local healthESP = createHealthESP(targetPlayer)
-                if healthESP then
-                    table.insert(espObjects.health, healthESP)
-                end
+                if healthESP then table.insert(espObjects.health, healthESP) end
             end
-            
-            -- Name ESP (shows player names above head)
             if playerSettings.NameESP.enabled then
                 local nameESP = createNameESP(targetPlayer)
-                if nameESP then
-                    table.insert(espObjects.name, nameESP)
-                end
+                if nameESP then table.insert(espObjects.name, nameESP) end
             end
-            
-            -- Distance ESP (shows distance to enemy)
             if playerSettings.DistanceESP.enabled then
                 local distanceESP = createDistanceESP(targetPlayer)
-                if distanceESP then
-                    table.insert(espObjects.distance, distanceESP)
-                end
+                if distanceESP then table.insert(espObjects.distance, distanceESP) end
             end
-            
-            -- Box ESP (shows box around enemy)
             if playerSettings.BoxESP.enabled then
                 local boxESP = createBoxESP(targetPlayer)
-                if boxESP then
-                    table.insert(espObjects.box, boxESP)
-                end
+                if boxESP then table.insert(espObjects.box, boxESP) end
             end
-            
-            -- Chams (makes enemies visible through walls)
             if playerSettings.Chams.enabled then
                 createChams(targetPlayer)
             end
         end
     end
-    
     print("ESP updated for " .. (#Players:GetPlayers() - 1) .. " enemies")
 end
 
 local function updateHealthESP()
     RunService.Heartbeat:Connect(function()
         if not playerSettings.ESPHealth.enabled and not playerSettings.DistanceESP.enabled then return end
-        
         for _, targetPlayer in pairs(Players:GetPlayers()) do
             if not shouldIgnorePlayer(targetPlayer) and targetPlayer.Character then
                 local humanoid = targetPlayer.Character:FindFirstChild("Humanoid")
                 local head = targetPlayer.Character:FindFirstChild("Head")
-                
                 if humanoid and head then
-                    -- Update Health ESP
                     if playerSettings.ESPHealth.enabled then
                         local healthESP = head:FindFirstChild("HealthESP_" .. targetPlayer.Name)
                         if healthESP then
                             local healthPercent = humanoid.Health / humanoid.MaxHealth
-                            
-                            -- Update health bar
                             local healthBar = healthESP:FindFirstChild("HealthBarBG") and healthESP.HealthBarBG:FindFirstChild("HealthBar")
                             if healthBar then
                                 healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
-                                healthBar.BackgroundColor3 = Color3.fromRGB(
-                                    255 * (1 - healthPercent),
-                                    255 * healthPercent,
-                                    0
-                                )
+                                healthBar.BackgroundColor3 = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
                             end
-                            
-                            -- Update health text
                             local healthText = healthESP:FindFirstChild("HealthText")
                             if healthText then
                                 healthText.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
                             end
                         end
                     end
-                    
-                    -- Update Distance ESP
                     if playerSettings.DistanceESP.enabled then
                         local distanceESP = head:FindFirstChild("DistanceESP_" .. targetPlayer.Name)
                         if distanceESP then
@@ -510,18 +395,14 @@ end
 -- Spectate Functions
 local function enableSpectate()
     if not selectedPlayer or not selectedPlayer.Character then return end
-    
     local camera = Workspace.CurrentCamera
     originalCameraSubject = camera.CameraSubject
-    
     if spectateConnection then spectateConnection:Disconnect() end
-    
     spectateConnection = RunService.Heartbeat:Connect(function()
         if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Humanoid") then
             camera.CameraSubject = selectedPlayer.Character.Humanoid
         end
     end)
-    
     print("Spectating: " .. selectedPlayer.Name)
 end
 
@@ -530,14 +411,12 @@ local function disableSpectate()
         spectateConnection:Disconnect()
         spectateConnection = nil
     end
-    
     local camera = Workspace.CurrentCamera
     if originalCameraSubject then
         camera.CameraSubject = originalCameraSubject
     elseif player.Character and player.Character:FindFirstChild("Humanoid") then
         camera.CameraSubject = player.Character.Humanoid
     end
-    
     print("Stopped spectating")
 end
 
@@ -545,19 +424,14 @@ end
 local function switchToFPP()
     local camera = Workspace.CurrentCamera
     if not camera then return end
-    
-    -- Store original camera settings
     if not originalCameraType then
         originalCameraType = camera.CameraType
         originalCameraMaxZoomDistance = player.CameraMaxZoomDistance
         originalCameraMinZoomDistance = player.CameraMinZoomDistance
     end
-    
-    -- Set First Person settings
     camera.CameraType = Enum.CameraType.Custom
     player.CameraMaxZoomDistance = 0.5
     player.CameraMinZoomDistance = 0.5
-    
     playerSettings.CameraMode.currentMode = "FPP"
     print("Switched to First Person Perspective (FPP)")
 end
@@ -565,20 +439,14 @@ end
 local function switchToTPP()
     local camera = Workspace.CurrentCamera
     if not camera then return end
-    
-    -- Store original camera settings
     if not originalCameraType then
         originalCameraType = camera.CameraType
         originalCameraMaxZoomDistance = player.CameraMaxZoomDistance
         originalCameraMinZoomDistance = player.CameraMinZoomDistance
     end
-    
-    -- Set Third Person settings
     camera.CameraType = Enum.CameraType.Custom
     player.CameraMaxZoomDistance = 128
     player.CameraMinZoomDistance = 5
-    
-    -- Force camera to third person distance
     if cameraConnection then cameraConnection:Disconnect() end
     cameraConnection = RunService.Heartbeat:Connect(function()
         if playerSettings.CameraMode.currentMode == "TPP" and player.Character and player.Character:FindFirstChild("Head") then
@@ -588,7 +456,6 @@ local function switchToTPP()
             end
         end
     end)
-    
     playerSettings.CameraMode.currentMode = "TPP"
     print("Switched to Third Person Perspective (TPP)")
 end
@@ -596,8 +463,6 @@ end
 local function resetCameraMode()
     local camera = Workspace.CurrentCamera
     if not camera then return end
-    
-    -- Restore original camera settings
     if originalCameraType then
         camera.CameraType = originalCameraType
     end
@@ -607,13 +472,10 @@ local function resetCameraMode()
     if originalCameraMinZoomDistance then
         player.CameraMinZoomDistance = originalCameraMinZoomDistance
     end
-    
-    -- Disconnect camera connection
     if cameraConnection then
         cameraConnection:Disconnect()
         cameraConnection = nil
     end
-    
     playerSettings.CameraMode.currentMode = "Default"
     print("Reset to Default Camera Mode")
 end
@@ -623,26 +485,18 @@ local function setupRespawnHandler()
     if respawnConnection then
         respawnConnection:Disconnect()
     end
-    
     respawnConnection = player.CharacterAdded:Connect(function(newCharacter)
-        wait(1) -- Wait for character to fully load
-        
+        wait(1)
         character = newCharacter
         humanoid = character:WaitForChild("Humanoid")
         rootPart = character:WaitForChild("HumanoidRootPart")
-        
         print("Character respawned, reapplying features...")
-        
-        -- Reapply all active features
         if playerSettings.MagnetPlayer.enabled then
             enableMagnetPlayer()
         end
-        
         if playerSettings.SpectatePlayer.enabled then
             enableSpectate()
         end
-        
-        -- Reapply camera mode
         if playerSettings.CameraMode.currentMode == "FPP" then
             wait(0.5)
             switchToFPP()
@@ -650,39 +504,28 @@ local function setupRespawnHandler()
             wait(0.5)
             switchToTPP()
         end
-        
-        -- Update ESP
         wait(0.5)
         updateESP()
-        
         print("All features reapplied after respawn")
     end)
 end
 
 -- Function to reapply all active features after respawn
 local function reapplyAllFeatures()
-    wait(2) -- Extra wait to ensure character is fully loaded
-    
-    -- Reapply Magnet Player
+    wait(2)
     if playerSettings.MagnetPlayer.enabled then
         enableMagnetPlayer()
         updateButtonState("Magnet Player", true)
     end
-    
-    -- Reapply Spectate
     if playerSettings.SpectatePlayer.enabled then
         enableSpectate()
         updateButtonState("Spectate Player", true)
     end
-    
-    -- Reapply camera mode
     if playerSettings.CameraMode.currentMode == "FPP" then
         switchToFPP()
     elseif playerSettings.CameraMode.currentMode == "TPP" then
         switchToTPP()
     end
-    
-    -- Reapply all ESP
     if playerSettings.ESP.enabled then
         updateButtonState("ESP Highlight", true)
     end
@@ -701,38 +544,24 @@ local function reapplyAllFeatures()
     if playerSettings.Chams.enabled then
         updateButtonState("Chams", true)
     end
-    
     updateESP()
-    
     print("All features reapplied and button states updated")
 end
 
 -- Module Functions
 function PlayerModule.init(dependencies)
-    -- Validate dependencies
-    if not dependencies then
-        warn("PlayerModule.init: No dependencies provided")
+    if not dependencies or not dependencies.player then
+        warn("PlayerModule.init: Missing dependencies or player")
         return false
     end
-    
-    if not dependencies.player then
-        warn("PlayerModule.init: Player dependency missing")
-        return false
-    end
-    
     player = dependencies.player
     character = dependencies.character
     humanoid = dependencies.humanoid
     rootPart = dependencies.rootPart
     settings = dependencies.settings
     connections = dependencies.connections
-    
     mouse = player:GetMouse()
-    
-    -- Initialize ESP objects
     espObjects = {highlight = {}, health = {}, name = {}, distance = {}, box = {}, chams = {}}
-    
-    -- Set initial selected player
     local playerList = Players:GetPlayers()
     for _, p in ipairs(playerList) do
         if p ~= player then
@@ -740,13 +569,8 @@ function PlayerModule.init(dependencies)
             break
         end
     end
-    
-    -- Start health ESP updater
     updateHealthESP()
-    
-    -- Setup respawn handler
     setupRespawnHandler()
-    
     print("Player module initialized successfully")
     return true
 end
@@ -756,27 +580,16 @@ function PlayerModule.getSelectedPlayer()
 end
 
 function PlayerModule.loadPlayerButtons(createButton, createToggleButton, currentSelectedPlayer)
-    -- Validate button creation functions
-    if not createButton or type(createButton) ~= "function" then
-        warn("PlayerModule.loadPlayerButtons: Invalid createButton function")
+    if not createButton or type(createButton) ~= "function" or not createToggleButton or type(createToggleButton) ~= "function" then
+        warn("PlayerModule.loadPlayerButtons: Invalid button creation functions")
         return false
     end
-    
-    if not createToggleButton or type(createToggleButton) ~= "function" then
-        warn("PlayerModule.loadPlayerButtons: Invalid createToggleButton function")
-        return false
-    end
-    
     selectedPlayer = currentSelectedPlayer or selectedPlayer
-    
-    -- Enhanced toggle button creation with state tracking
     local function safeCreateToggleButton(name, onCallback, offCallback)
         local success, result = pcall(function()
             local button = createToggleButton(name, function(enabled)
                 if onCallback then onCallback(enabled) end
             end, offCallback)
-            
-            -- Store button reference for state updates
             buttonStates[name] = {
                 button = button,
                 updateState = function(enabled)
@@ -785,33 +598,24 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
                     end
                 end
             }
-            
             return button
         end)
-        
         if not success then
             warn("Failed to create toggle button '" .. name .. "': " .. tostring(result))
             return nil
         end
-        
         return result
     end
-    
-    -- Wrap button creation in pcall for error handling
     local function safeCreateButton(name, callback)
         local success, result = pcall(function()
             return createButton(name, callback)
         end)
-        
         if not success then
             warn("Failed to create button '" .. name .. "': " .. tostring(result))
             return nil
         end
-        
         return result
     end
-    
-    -- Player Selection
     safeCreateButton("Next Player", function()
         local nextPlayer = getNextPlayer()
         if nextPlayer then
@@ -821,17 +625,15 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
             print("No other players available")
         end
     end)
-    
     safeCreateButton("Previous Player", function()
         local prevPlayer = getPreviousPlayer()
         if prevPlayer then
             selectedPlayer = prevPlayer
-            print("Selected Player: " .. selectedPlayer.Name)
+            print("Selected Player: " .. prevPlayer.Name)
         else
             print("No other players available")
         end
     end)
-    
     safeCreateButton("Show Selected", function()
         if selectedPlayer then
             print("Currently Selected: " .. selectedPlayer.Name)
@@ -839,9 +641,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
             print("No player selected")
         end
     end)
-    
-    -- Magnet Player
-    local magnetButton = safeCreateToggleButton("Magnet Player", function(enabled)
+    safeCreateToggleButton("Magnet Player", function(enabled)
         playerSettings.MagnetPlayer.enabled = enabled
         if enabled then
             enableMagnetPlayer()
@@ -852,54 +652,40 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         playerSettings.MagnetPlayer.enabled = false
         disableMagnetPlayer()
     end)
-    
-    -- ESP Features
-    local espButton = safeCreateToggleButton("ESP Highlight", function(enabled)
+    safeCreateToggleButton("ESP Highlight", function(enabled)
         playerSettings.ESP.enabled = enabled
         updateESP()
     end, nil)
-    
-    local healthButton = safeCreateToggleButton("ESP Health", function(enabled)
+    safeCreateToggleButton("ESP Health", function(enabled)
         playerSettings.ESPHealth.enabled = enabled
         updateESP()
     end, nil)
-    
-    local nameButton = safeCreateToggleButton("ESP Names", function(enabled)
+    safeCreateToggleButton("ESP Names", function(enabled)
         playerSettings.NameESP.enabled = enabled
         updateESP()
     end, nil)
-    
-    local distanceButton = safeCreateToggleButton("ESP Distance", function(enabled)
+    safeCreateToggleButton("ESP Distance", function(enabled)
         playerSettings.DistanceESP.enabled = enabled
         updateESP()
     end, nil)
-    
-    local boxButton = safeCreateToggleButton("ESP Box", function(enabled)
+    safeCreateToggleButton("ESP Box", function(enabled)
         playerSettings.BoxESP.enabled = enabled
         updateESP()
     end, nil)
-    
-    local chamsButton = safeCreateToggleButton("Chams", function(enabled)
+    safeCreateToggleButton("Chams", function(enabled)
         playerSettings.Chams.enabled = enabled
         updateESP()
     end, nil)
-    
-    -- ESP Settings
     safeCreateButton("ESP Color", function()
         currentColorIndex = currentColorIndex + 1
-        if currentColorIndex > #espColors then
-            currentColorIndex = 1
-        end
-        
+        if currentColorIndex > #espColors then currentColorIndex = 1 end
         local newColor = espColors[currentColorIndex]
         playerSettings.ESP.color = newColor.color
         playerSettings.BoxESP.color = newColor.color
         playerSettings.Chams.color = newColor.color
-        
         print("ESP Color: " .. newColor.name)
         updateESP()
     end)
-    
     safeCreateButton("Team Ignore Toggle", function()
         playerSettings.ESP.ignoreTeam = not playerSettings.ESP.ignoreTeam
         playerSettings.ESPHealth.ignoreTeam = playerSettings.ESP.ignoreTeam
@@ -907,12 +693,9 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         playerSettings.DistanceESP.ignoreTeam = playerSettings.ESP.ignoreTeam
         playerSettings.BoxESP.ignoreTeam = playerSettings.ESP.ignoreTeam
         playerSettings.Chams.ignoreTeam = playerSettings.ESP.ignoreTeam
-        
         print("Ignore Team: " .. tostring(playerSettings.ESP.ignoreTeam))
         updateESP()
     end)
-    
-    -- Player Actions
     safeCreateButton("Teleport to Player", function()
         if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -923,8 +706,7 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
             print("Selected player not available")
         end
     end)
-    
-    local spectateButton = safeCreateToggleButton("Spectate Player", function(enabled)
+    safeCreateToggleButton("Spectate Player", function(enabled)
         playerSettings.SpectatePlayer.enabled = enabled
         if enabled then
             enableSpectate()
@@ -935,45 +717,34 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         playerSettings.SpectatePlayer.enabled = false
         disableSpectate()
     end)
-    
-    -- Camera Mode Controls
     safeCreateButton("Switch to FPP", function()
         switchToFPP()
     end)
-    
     safeCreateButton("Switch to TPP", function()
         switchToTPP()
     end)
-    
     safeCreateButton("Reset Camera", function()
         resetCameraMode()
     end)
-    
     safeCreateButton("Show Camera Mode", function()
         print("Current Camera Mode: " .. playerSettings.CameraMode.currentMode)
     end)
-    
-    -- Magnet Settings
     safeCreateButton("Magnet Distance +", function()
         playerSettings.MagnetPlayer.distance = playerSettings.MagnetPlayer.distance + 10
         print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance .. " studs")
     end)
-    
     safeCreateButton("Magnet Distance -", function()
         playerSettings.MagnetPlayer.distance = math.max(playerSettings.MagnetPlayer.distance - 10, 10)
         print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance .. " studs")
     end)
-    
     safeCreateButton("Magnet Speed +", function()
         playerSettings.MagnetPlayer.speed = math.min(playerSettings.MagnetPlayer.speed + 0.5, 10)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
-    
     safeCreateButton("Magnet Speed -", function()
         playerSettings.MagnetPlayer.speed = math.max(playerSettings.MagnetPlayer.speed - 0.5, 0.5)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
-    
     safeCreateButton("Test ESP", function()
         local enemyCount = 0
         for _, p in pairs(Players:GetPlayers()) do
@@ -984,7 +755,6 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         print("Found " .. enemyCount .. " enemies for ESP")
         updateESP()
     end)
-    
     safeCreateButton("Test Magnet", function()
         local enemyCount = 0
         for _, p in pairs(Players:GetPlayers()) do
@@ -997,10 +767,8 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         end
         print("Found " .. enemyCount .. " enemies in magnet range (" .. playerSettings.MagnetPlayer.distance .. " studs)")
     end)
-    
-    -- Update button states to show current settings
     spawn(function()
-        wait(0.5) -- Wait for buttons to be created
+        wait(0.5)
         updateButtonState("Magnet Player", playerSettings.MagnetPlayer.enabled)
         updateButtonState("ESP Highlight", playerSettings.ESP.enabled)
         updateButtonState("ESP Health", playerSettings.ESPHealth.enabled)
@@ -1010,13 +778,11 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
         updateButtonState("Chams", playerSettings.Chams.enabled)
         updateButtonState("Spectate Player", playerSettings.SpectatePlayer.enabled)
     end)
-    
     print("Player buttons loaded successfully")
     return true
 end
 
 function PlayerModule.resetStates()
-    -- Disable all features
     playerSettings.MagnetPlayer.enabled = false
     playerSettings.ESP.enabled = false
     playerSettings.ESPHealth.enabled = false
@@ -1025,52 +791,37 @@ function PlayerModule.resetStates()
     playerSettings.BoxESP.enabled = false
     playerSettings.Chams.enabled = false
     playerSettings.SpectatePlayer.enabled = false
-    
-    -- Clean up connections
     if magnetConnection then
         magnetConnection:Disconnect()
         magnetConnection = nil
     end
-    
     if spectateConnection then
         spectateConnection:Disconnect()
         spectateConnection = nil
     end
-    
     if cameraConnection then
         cameraConnection:Disconnect()
         cameraConnection = nil
     end
-    
     if respawnConnection then
         respawnConnection:Disconnect()
         respawnConnection = nil
     end
-    
-    -- Clean up ESP objects
     for _, espList in pairs(espObjects) do
         for _, espObj in pairs(espList) do
-            if espObj and espObj.Parent then
-                espObj:Destroy()
-            end
+            if espObj and espObj.Parent then espObj:Destroy() end
         end
     end
     espObjects = {highlight = {}, health = {}, name = {}, distance = {}, box = {}, chams = {}}
-    
-    -- Restore camera
     disableSpectate()
     resetCameraMode()
-    
-    -- Update button states
     for buttonName, _ in pairs(buttonStates) do
         updateButtonState(buttonName, false)
     end
-    
     print("Player module states reset successfully")
     return true
 end
 
--- Function to save current settings state
 function PlayerModule.saveSettings()
     return {
         MagnetPlayer = {
@@ -1119,11 +870,8 @@ function PlayerModule.saveSettings()
     }
 end
 
--- Function to load settings state
 function PlayerModule.loadSettings(savedSettings)
     if not savedSettings then return false end
-    
-    -- Load all settings
     for category, settings in pairs(savedSettings) do
         if playerSettings[category] then
             for setting, value in pairs(settings) do
@@ -1133,35 +881,26 @@ function PlayerModule.loadSettings(savedSettings)
             end
         end
     end
-    
-    -- Restore selected player
     if savedSettings.selectedPlayerName then
         local targetPlayer = Players:FindFirstChild(savedSettings.selectedPlayerName)
         if targetPlayer then
             selectedPlayer = targetPlayer
         end
     end
-    
-    -- Restore color index
     if savedSettings.currentColorIndex then
         currentColorIndex = savedSettings.currentColorIndex
     end
-    
-    -- Reapply active features
     spawn(function()
         wait(1)
         reapplyAllFeatures()
     end)
-    
     print("Settings loaded and features reapplied")
     return true
 end
 
--- Function to handle player leaving
 local function handlePlayerLeaving()
     Players.PlayerRemoving:Connect(function(leavingPlayer)
         if leavingPlayer == selectedPlayer then
-            -- Find next available player
             selectedPlayer = getNextPlayer()
             if selectedPlayer then
                 print("Selected player left, switched to: " .. selectedPlayer.Name)
@@ -1169,18 +908,12 @@ local function handlePlayerLeaving()
                 print("Selected player left, no other players available")
             end
         end
-        
-        -- Update ESP when any player leaves
         wait(0.5)
         updateESP()
     end)
-    
-    -- Handle new players joining
     Players.PlayerAdded:Connect(function(newPlayer)
-        wait(2) -- Wait for player to load
+        wait(2)
         updateESP()
-        
-        -- If no player is selected, select the new player
         if not selectedPlayer and newPlayer ~= player then
             selectedPlayer = newPlayer
             print("New player joined and selected: " .. newPlayer.Name)
@@ -1188,12 +921,8 @@ local function handlePlayerLeaving()
     end)
 end
 
--- Enhanced initialization with player event handling
 local function enhancedInit()
-    -- Handle player leaving/joining events
     handlePlayerLeaving()
-    
-    -- Monitor player characters being added (respawns)
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= player then
             p.CharacterAdded:Connect(function()
@@ -1206,8 +935,6 @@ local function enhancedInit()
             end)
         end
     end
-    
-    -- Handle new players that join later
     Players.PlayerAdded:Connect(function(newPlayer)
         if newPlayer ~= player then
             newPlayer.CharacterAdded:Connect(function()
@@ -1222,7 +949,6 @@ local function enhancedInit()
     end)
 end
 
--- Debug function to help troubleshoot issues
 function PlayerModule.getDebugInfo()
     local debugInfo = {
         selectedPlayer = selectedPlayer and selectedPlayer.Name or "None",
@@ -1242,100 +968,67 @@ function PlayerModule.getDebugInfo()
         },
         buttonStatesCount = 0
     }
-    
-    -- Count ESP objects
     for espType, espList in pairs(espObjects) do
         debugInfo.espObjectsCount[espType] = #espList
     end
-    
-    -- Count button states
     for _ in pairs(buttonStates) do
         debugInfo.buttonStatesCount = debugInfo.buttonStatesCount + 1
     end
-    
     return debugInfo
 end
 
--- Function to validate the module state
 function PlayerModule.validateState()
     local issues = {}
-    
     if not player then
         table.insert(issues, "Player reference is nil")
     end
-    
     if not Players:FindFirstChild(player.Name) then
         table.insert(issues, "Player not found in Players service")
     end
-    
     if selectedPlayer and not Players:FindFirstChild(selectedPlayer.Name) then
         table.insert(issues, "Selected player no longer exists")
-        selectedPlayer = getNextPlayer() -- Auto-fix
+        selectedPlayer = getNextPlayer()
     end
-    
-    -- Check for orphaned connections
     local activeConnections = 0
     if magnetConnection then activeConnections = activeConnections + 1 end
     if spectateConnection then activeConnections = activeConnections + 1 end
     if cameraConnection then activeConnections = activeConnections + 1 end
     if respawnConnection then activeConnections = activeConnections + 1 end
-    
     if activeConnections > 0 then
         print("Active connections: " .. activeConnections)
     end
-    
     return issues
 end
 
--- Function to force refresh all features
 function PlayerModule.forceRefresh()
     print("Force refreshing all player features...")
-    
-    -- Reapply all active features
     if playerSettings.MagnetPlayer.enabled then
         disableMagnetPlayer()
         wait(0.1)
         enableMagnetPlayer()
     end
-    
     if playerSettings.SpectatePlayer.enabled then
         disableSpectate()
         wait(0.1)
         enableSpectate()
     end
-    
-    -- Refresh ESP
     updateESP()
-    
-    -- Update all button states
     for buttonName in pairs(buttonStates) do
         local enabled = false
-        
-        if buttonName == "Magnet Player" then
-            enabled = playerSettings.MagnetPlayer.enabled
-        elseif buttonName == "ESP Highlight" then
-            enabled = playerSettings.ESP.enabled
-        elseif buttonName == "ESP Health" then
-            enabled = playerSettings.ESPHealth.enabled
-        elseif buttonName == "ESP Names" then
-            enabled = playerSettings.NameESP.enabled
-        elseif buttonName == "ESP Distance" then
-            enabled = playerSettings.DistanceESP.enabled
-        elseif buttonName == "ESP Box" then
-            enabled = playerSettings.BoxESP.enabled
-        elseif buttonName == "Chams" then
-            enabled = playerSettings.Chams.enabled
-        elseif buttonName == "Spectate Player" then
-            enabled = playerSettings.SpectatePlayer.enabled
+        if buttonName == "Magnet Player" then enabled = playerSettings.MagnetPlayer.enabled
+        elseif buttonName == "ESP Highlight" then enabled = playerSettings.ESP.enabled
+        elseif buttonName == "ESP Health" then enabled = playerSettings.ESPHealth.enabled
+        elseif buttonName == "ESP Names" then enabled = playerSettings.NameESP.enabled
+        elseif buttonName == "ESP Distance" then enabled = playerSettings.DistanceESP.enabled
+        elseif buttonName == "ESP Box" then enabled = playerSettings.BoxESP.enabled
+        elseif buttonName == "Chams" then enabled = playerSettings.Chams.enabled
+        elseif buttonName == "Spectate Player" then enabled = playerSettings.SpectatePlayer.enabled
         end
-        
         updateButtonState(buttonName, enabled)
     end
-    
     print("Force refresh completed")
 end
 
--- Initialize enhanced features when module loads
 spawn(function()
     wait(2)
     enhancedInit()
