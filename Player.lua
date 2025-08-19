@@ -168,24 +168,44 @@ local function enableMagnetPlayer()
         local camera = Workspace.CurrentCamera
         if not camera then return end
         
-        local targetPlayer = selectedPlayer
-        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            if not shouldIgnorePlayer(targetPlayer) then
-                local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-                local currentPos = player.Character.HumanoidRootPart.Position
-                local direction = (targetPos - currentPos).Unit
-                local distance = (targetPos - currentPos).Magnitude
+        local playerRootPart = player.Character.HumanoidRootPart
+        local cameraPosition = camera.CFrame.Position
+        local cameraLookVector = camera.CFrame.LookVector
+        
+        -- Find all enemy players and magnet them to crosshair
+        for _, targetPlayer in pairs(Players:GetPlayers()) do
+            if not shouldIgnorePlayer(targetPlayer) and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local targetRootPart = targetPlayer.Character.HumanoidRootPart
+                local distanceToPlayer = (playerRootPart.Position - targetRootPart.Position).Magnitude
                 
-                if distance <= playerSettings.MagnetPlayer.distance then
-                    -- Move player towards crosshair position
+                if distanceToPlayer <= playerSettings.MagnetPlayer.distance then
+                    -- Calculate crosshair position (where camera is looking)
+                    local crosshairPosition = cameraPosition + (cameraLookVector * 100)
+                    
+                    -- Move enemy towards crosshair position smoothly
+                    local currentPos = targetRootPart.Position
+                    local targetPos = crosshairPosition
+                    local direction = (targetPos - currentPos).Unit
+                    
+                    -- Apply magnet force
                     local newPos = currentPos + direction * playerSettings.MagnetPlayer.speed
-                    player.Character.HumanoidRootPart.CFrame = CFrame.new(newPos, targetPos)
+                    
+                    -- Keep enemy at reasonable distance from camera (5-10 studs in front)
+                    local distanceFromCamera = (newPos - cameraPosition).Magnitude
+                    if distanceFromCamera < 8 then
+                        newPos = cameraPosition + cameraLookVector * 8
+                    elseif distanceFromCamera > 15 then
+                        newPos = cameraPosition + cameraLookVector * 15
+                    end
+                    
+                    -- Apply the new position
+                    targetRootPart.CFrame = CFrame.new(newPos, cameraPosition)
                 end
             end
         end
     end)
     
-    print("Magnet Player enabled")
+    print("Magnet Player enabled - Enemies will be pulled to your crosshair")
 end
 
 local function disableMagnetPlayer()
@@ -200,6 +220,12 @@ end
 local function createHighlight(targetPlayer)
     if not targetPlayer.Character then return nil end
     
+    -- Remove any existing highlight first
+    local existingHighlight = targetPlayer.Character:FindFirstChild("PlayerESP_" .. targetPlayer.Name)
+    if existingHighlight then
+        existingHighlight:Destroy()
+    end
+    
     local highlight = Instance.new("Highlight")
     highlight.Name = "PlayerESP_" .. targetPlayer.Name
     highlight.Parent = targetPlayer.Character
@@ -208,7 +234,9 @@ local function createHighlight(targetPlayer)
     highlight.FillTransparency = playerSettings.ESP.transparency
     highlight.OutlineTransparency = 0
     highlight.Adornee = targetPlayer.Character
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     
+    print("ESP Highlight created for: " .. targetPlayer.Name)
     return highlight
 end
 
@@ -339,15 +367,29 @@ local function createChams(targetPlayer)
     
     for _, part in pairs(targetPlayer.Character:GetChildren()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            -- Remove existing chams first
+            local existingChams = part:FindFirstChild("Chams_" .. targetPlayer.Name)
+            if existingChams then
+                existingChams:Destroy()
+            end
+            
             local chams = Instance.new("SelectionBox")
             chams.Name = "Chams_" .. targetPlayer.Name
             chams.Parent = part
             chams.Adornee = part
             chams.Color3 = playerSettings.Chams.color
-            chams.Transparency = 0.5
-            chams.LineThickness = 0.1
+            chams.Transparency = 0.3
+            chams.LineThickness = 0.2
+            chams.SurfaceTransparency = 0.8
+            
+            -- Make part slightly transparent so chams are more visible
+            if part.Transparency < 0.9 then
+                part.Transparency = 0.7
+            end
         end
     end
+    
+    print("Chams created for: " .. targetPlayer.Name)
 end
 
 local function updateESP()
@@ -361,10 +403,10 @@ local function updateESP()
     end
     espObjects = {highlight = {}, health = {}, name = {}, distance = {}, box = {}, chams = {}}
     
-    -- Create ESP for all players
+    -- Create ESP for all enemy players
     for _, targetPlayer in pairs(Players:GetPlayers()) do
         if not shouldIgnorePlayer(targetPlayer) and targetPlayer.Character then
-            -- Highlight ESP
+            -- Highlight ESP (makes enemies glow)
             if playerSettings.ESP.enabled then
                 local highlight = createHighlight(targetPlayer)
                 if highlight then
@@ -372,7 +414,7 @@ local function updateESP()
                 end
             end
             
-            -- Health ESP
+            -- Health ESP (shows health bar and numbers)
             if playerSettings.ESPHealth.enabled then
                 local healthESP = createHealthESP(targetPlayer)
                 if healthESP then
@@ -380,7 +422,7 @@ local function updateESP()
                 end
             end
             
-            -- Name ESP
+            -- Name ESP (shows player names above head)
             if playerSettings.NameESP.enabled then
                 local nameESP = createNameESP(targetPlayer)
                 if nameESP then
@@ -388,7 +430,7 @@ local function updateESP()
                 end
             end
             
-            -- Distance ESP
+            -- Distance ESP (shows distance to enemy)
             if playerSettings.DistanceESP.enabled then
                 local distanceESP = createDistanceESP(targetPlayer)
                 if distanceESP then
@@ -396,7 +438,7 @@ local function updateESP()
                 end
             end
             
-            -- Box ESP
+            -- Box ESP (shows box around enemy)
             if playerSettings.BoxESP.enabled then
                 local boxESP = createBoxESP(targetPlayer)
                 if boxESP then
@@ -404,17 +446,19 @@ local function updateESP()
                 end
             end
             
-            -- Chams
+            -- Chams (makes enemies visible through walls)
             if playerSettings.Chams.enabled then
                 createChams(targetPlayer)
             end
         end
     end
+    
+    print("ESP updated for " .. (#Players:GetPlayers() - 1) .. " enemies")
 end
 
 local function updateHealthESP()
     RunService.Heartbeat:Connect(function()
-        if not playerSettings.ESPHealth.enabled then return end
+        if not playerSettings.ESPHealth.enabled and not playerSettings.DistanceESP.enabled then return end
         
         for _, targetPlayer in pairs(Players:GetPlayers()) do
             if not shouldIgnorePlayer(targetPlayer) and targetPlayer.Character then
@@ -422,37 +466,39 @@ local function updateHealthESP()
                 local head = targetPlayer.Character:FindFirstChild("Head")
                 
                 if humanoid and head then
-                    local healthESP = head:FindFirstChild("HealthESP_" .. targetPlayer.Name)
-                    if healthESP then
-                        local healthPercent = humanoid.Health / humanoid.MaxHealth
-                        
-                        -- Update health bar
-                        local healthBar = healthESP:FindFirstChild("HealthBarBG") and healthESP.HealthBarBG:FindFirstChild("HealthBar")
-                        if healthBar then
-                            healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
-                            healthBar.BackgroundColor3 = Color3.fromRGB(
-                                255 * (1 - healthPercent),
-                                255 * healthPercent,
-                                0
-                            )
-                        end
-                        
-                        -- Update health text
-                        local healthText = healthESP:FindFirstChild("HealthText")
-                        if healthText then
-                            healthText.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+                    -- Update Health ESP
+                    if playerSettings.ESPHealth.enabled then
+                        local healthESP = head:FindFirstChild("HealthESP_" .. targetPlayer.Name)
+                        if healthESP then
+                            local healthPercent = humanoid.Health / humanoid.MaxHealth
+                            
+                            -- Update health bar
+                            local healthBar = healthESP:FindFirstChild("HealthBarBG") and healthESP.HealthBarBG:FindFirstChild("HealthBar")
+                            if healthBar then
+                                healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
+                                healthBar.BackgroundColor3 = Color3.fromRGB(
+                                    255 * (1 - healthPercent),
+                                    255 * healthPercent,
+                                    0
+                                )
+                            end
+                            
+                            -- Update health text
+                            local healthText = healthESP:FindFirstChild("HealthText")
+                            if healthText then
+                                healthText.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+                            end
                         end
                     end
-                end
-                
-                -- Update distance
-                local head = targetPlayer.Character:FindFirstChild("Head")
-                if head then
-                    local distanceESP = head:FindFirstChild("DistanceESP_" .. targetPlayer.Name)
-                    if distanceESP then
-                        local distanceLabel = distanceESP:FindFirstChild("DistanceLabel")
-                        if distanceLabel then
-                            distanceLabel.Text = getPlayerDistance(targetPlayer) .. "m"
+                    
+                    -- Update Distance ESP
+                    if playerSettings.DistanceESP.enabled then
+                        local distanceESP = head:FindFirstChild("DistanceESP_" .. targetPlayer.Name)
+                        if distanceESP then
+                            local distanceLabel = distanceESP:FindFirstChild("DistanceLabel")
+                            if distanceLabel then
+                                distanceLabel.Text = getPlayerDistance(targetPlayer) .. "m"
+                            end
                         end
                     end
                 end
@@ -910,22 +956,46 @@ function PlayerModule.loadPlayerButtons(createButton, createToggleButton, curren
     -- Magnet Settings
     safeCreateButton("Magnet Distance +", function()
         playerSettings.MagnetPlayer.distance = playerSettings.MagnetPlayer.distance + 10
-        print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance)
+        print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance .. " studs")
     end)
     
     safeCreateButton("Magnet Distance -", function()
         playerSettings.MagnetPlayer.distance = math.max(playerSettings.MagnetPlayer.distance - 10, 10)
-        print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance)
+        print("Magnet Distance: " .. playerSettings.MagnetPlayer.distance .. " studs")
     end)
     
     safeCreateButton("Magnet Speed +", function()
-        playerSettings.MagnetPlayer.speed = math.min(playerSettings.MagnetPlayer.speed + 0.05, 1)
+        playerSettings.MagnetPlayer.speed = math.min(playerSettings.MagnetPlayer.speed + 0.5, 10)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
     end)
     
     safeCreateButton("Magnet Speed -", function()
-        playerSettings.MagnetPlayer.speed = math.max(playerSettings.MagnetPlayer.speed - 0.05, 0.01)
+        playerSettings.MagnetPlayer.speed = math.max(playerSettings.MagnetPlayer.speed - 0.5, 0.5)
         print("Magnet Speed: " .. playerSettings.MagnetPlayer.speed)
+    end)
+    
+    safeCreateButton("Test ESP", function()
+        local enemyCount = 0
+        for _, p in pairs(Players:GetPlayers()) do
+            if not shouldIgnorePlayer(p) then
+                enemyCount = enemyCount + 1
+            end
+        end
+        print("Found " .. enemyCount .. " enemies for ESP")
+        updateESP()
+    end)
+    
+    safeCreateButton("Test Magnet", function()
+        local enemyCount = 0
+        for _, p in pairs(Players:GetPlayers()) do
+            if not shouldIgnorePlayer(p) and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local distance = getPlayerDistance(p)
+                if distance <= playerSettings.MagnetPlayer.distance then
+                    enemyCount = enemyCount + 1
+                end
+            end
+        end
+        print("Found " .. enemyCount .. " enemies in magnet range (" .. playerSettings.MagnetPlayer.distance .. " studs)")
     end)
     
     -- Update button states to show current settings
